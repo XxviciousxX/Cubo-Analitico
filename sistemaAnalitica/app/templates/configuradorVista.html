@@ -1,0 +1,991 @@
+{% extends "base.html" %}
+
+{% block title %}Configuración de Vistas Analíticas | Sistema Analítico{% endblock %}
+{% block page_title %}Configuración de Vistas{% endblock %}
+
+{% set ruta_activa = 'configuracion_vistas' %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto pb-12">
+    <!-- Encabezado de Página -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/60 pb-5">
+        <div>
+            <h1 class="text-2xl md:text-3xl font-black font-display text-primary flex items-center gap-3">
+                <span class="material-symbols-outlined text-3xl">settings_suggest</span>
+                Configuración de Vistas y Gobernanza
+            </h1>
+            <p class="text-sm text-on-surface-variant mt-1 font-medium">
+                Definición semántica de dimensiones, métricas, compatibilidad Plotly y blindaje de granularidad (grano máximo).
+            </p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="/explorador" class="px-4 py-2 text-xs font-bold text-on-surface-variant hover:text-primary bg-white border border-outline-variant/80 rounded-xl transition-all flex items-center gap-2 shadow-sm">
+                <span class="material-symbols-outlined text-base">explore</span>
+                Ir al Explorador
+            </a>
+            {% if vistaSeleccionada %}
+            <button id="btnGuardarConfiguracion" onclick="guardarConfiguracionCompleta()" class="btn-glow px-5 py-2.5 rounded-xl text-white text-xs font-bold flex items-center gap-2 cursor-pointer shadow-md">
+                <span class="material-symbols-outlined text-lg">save</span>
+                Guardar Configuración
+            </button>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Selector de Vista -->
+    <div class="bg-white/80 backdrop-blur-md rounded-2xl p-5 border border-outline-variant/60 shadow-sm">
+        <label class="block text-xs font-black uppercase tracking-wider text-on-surface-variant mb-2">
+            Seleccionar Vista Analítica para Configurar
+        </label>
+        <div class="flex flex-col sm:flex-row gap-4 items-center">
+            <select id="selectIdVista" onchange="cambiarVista(this.value)" class="w-full sm:w-1/2 px-4 py-2.5 text-sm bg-surface-container-lowest border border-outline-variant rounded-xl font-medium focus:ring-2 focus:ring-primary/20 focus:border-primary transition-all">
+                <option value="">-- Selecciona una vista disponible --</option>
+                {% for v in vistasDisponibles %}
+                <option value="{{ v.idVista }}" {% if vistaSeleccionada and vistaSeleccionada.idVista == v.idVista %}selected{% endif %}>
+                    {{ v.nombreVista }} ({{ v.codigoVista }})
+                </option>
+                {% endfor %}
+            </select>
+
+            {% if vistaSeleccionada %}
+            <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                <span class="material-symbols-outlined text-sm">verified</span>
+                Parquet Activo: {{ vistaSeleccionada.rutaArchivoParquet.split('\\')[-1] }}
+            </span>
+            {% endif %}
+        </div>
+    </div>
+
+    {% if not vistaSeleccionada %}
+    <!-- Estado Vacío -->
+    <div class="bg-white/60 backdrop-blur-sm border-2 border-dashed border-outline-variant/80 rounded-3xl p-12 text-center max-w-xl mx-auto my-12">
+        <div class="w-16 h-16 rounded-2xl bg-primary/10 text-primary flex items-center justify-center mx-auto mb-4">
+            <span class="material-symbols-outlined text-3xl">auto_fix_high</span>
+        </div>
+        <h3 class="text-base font-black font-display text-on-surface">Selecciona una vista analítica</h3>
+        <p class="text-xs text-on-surface-variant mt-2 max-w-md mx-auto">
+            Elige una vista registrada en el selector superior para definir sus dimensiones de agrupación, métricas agregables, jerarquías de desglose y reglas de compatibilidad de gráficos Plotly.
+        </p>
+    </div>
+    {% else %}
+
+    <!-- Formulario Multi-Card con Tarjetas de Configuración -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- Columna Izquierda: Reglas de Gobernanza y Granularidad (grano máximo) -->
+        <div class="lg:col-span-7 space-y-6">
+
+            <!-- Card 1: Gobernanza de Granularidad (Grano Máximo) -->
+            <div class="bg-white/90 backdrop-blur-md rounded-2xl p-6 border border-outline-variant/60 shadow-sm financial-card">
+                <div class="flex items-center justify-between pb-4 mb-4 border-b border-outline-variant/40">
+                    <div class="flex items-center gap-3">
+                        <div class="w-9 h-9 rounded-xl bg-blue-50 text-primary flex items-center justify-center">
+                            <span class="material-symbols-outlined text-xl">shield</span>
+                        </div>
+                        <div>
+                            <h2 class="text-sm font-black font-display text-primary uppercase tracking-wide">
+                                1. Gobernanza de Granularidad (Grano Máximo)
+                            </h2>
+                            <p class="text-xs text-on-surface-variant">Protección contra fuga de registros transaccionales atómicos.</p>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="space-y-4">
+                    <!-- Dimensiones de Grano Obligatorias -->
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface mb-1">
+                            Dimensiones de Grano Permitidas (Agrupación) <span class="text-red-500">*</span>
+                        </label>
+                        <p class="text-[11px] text-on-surface-variant mb-2">
+                            Selecciona los campos que los usuarios podrán utilizar para agrupar (GROUP BY).
+                        </p>
+                        <div class="grid grid-cols-2 sm:grid-cols-3 gap-2 max-h-48 overflow-y-auto p-2 bg-surface-container-lowest rounded-xl border border-outline-variant/60">
+                            {% for col in columnasParquet %}
+                            <label class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-slate-50 cursor-pointer text-xs">
+                                <input type="checkbox" name="chkDimensiones" value="{{ col.nombre }}"
+                                    {% if configuracionActual and col.nombre in configuracionActual.granoPermitido.dimensionesVisibles %}checked
+                                    {% elif not configuracionActual and not col.esNumerico %}checked{% endif %}
+                                    onchange="alCambiarDimension(this)"
+                                    class="rounded text-primary focus:ring-primary border-outline-variant">
+                                <span class="font-medium text-slate-700 truncate" title="{{ col.nombre }} ({{ col.tipo }})">{{ col.nombre }}</span>
+                            </label>
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Métricas Agregadas Permitidas -->
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface mb-1">
+                            Métricas Numéricas Permitidas (Agregación) <span class="text-red-500">*</span>
+                        </label>
+                        <p class="text-[11px] text-on-surface-variant mb-2">
+                            Columnas numéricas que admiten funciones de agregación (SUM, COUNT, AVG, MIN, MAX). Las columnas seleccionadas como dimensiones de grano se excluyen automáticamente.
+                        </p>
+                        <div class="space-y-2 max-h-52 overflow-y-auto p-2 bg-surface-container-lowest rounded-xl border border-outline-variant/60" id="listaMetricasNumericas">
+                            {% for col in columnasParquet %}
+                            {% if col.esNumerico %}
+                            <div id="contenedorMetrica_{{ col.nombre }}" class="flex items-center justify-between gap-3 p-2 rounded-lg bg-white border border-outline-variant/40 text-xs transition-all">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <input type="checkbox" name="chkMetricas" value="{{ col.nombre }}"
+                                        {% if configuracionActual and col.nombre in (configuracionActual.granoPermitido.metricas | map(attribute='columna')) %}checked
+                                        {% elif not configuracionActual %}checked{% endif %}
+                                        onchange="alCambiarMetrica(this)"
+                                        class="rounded text-primary focus:ring-primary border-outline-variant">
+                                    <span class="font-bold text-slate-800">{{ col.nombre }}</span>
+                                </label>
+                                <div class="flex items-center gap-2">
+                                    <span class="text-[11px] text-slate-400">Operación:</span>
+                                    <select id="agregacion_{{ col.nombre }}" class="text-xs px-2 py-1 bg-slate-50 border border-outline-variant rounded-lg font-semibold text-primary">
+                                        <option value="SUM" selected>SUM</option>
+                                        <option value="COUNT">COUNT</option>
+                                        <option value="AVG">AVG</option>
+                                        <option value="MAX">MAX</option>
+                                        <option value="MIN">MIN</option>
+                                    </select>
+                                </div>
+                            </div>
+                            {% endif %}
+                            {% endfor %}
+                        </div>
+                    </div>
+
+                    <!-- Toggle Blindaje Atómico -->
+                    <div class="p-3 bg-amber-50/70 border border-amber-200/80 rounded-xl flex items-start gap-3">
+                        <input type="checkbox" id="chkBloquearNivelDetalle"
+                            {% if configuracionActual is none or configuracionActual.politicaGobernanza.bloquearNivelDetalle %}checked{% endif %}
+                            class="mt-1 rounded text-primary focus:ring-primary border-amber-300">
+                        <div>
+                            <label for="chkBloquearNivelDetalle" class="text-xs font-black text-amber-900 cursor-pointer">
+                                Bloquear acceso a nivel de detalle transaccional (Grano Máximo Blindado)
+                            </label>
+                            <p class="text-[11px] text-amber-800/90 mt-0.5 leading-snug">
+                                Prohíbe cualquier consulta o exportación que no contenga una cláusula <code>GROUP BY</code> con agregación previa. Protege datos sensibles a nivel registro.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Card 2: Jerarquía de Desglose (Drill-Down) -->
+            <div class="bg-white/90 backdrop-blur-md rounded-2xl p-6 border border-outline-variant/60 shadow-sm financial-card">
+                <div class="flex items-center gap-3 pb-4 mb-4 border-b border-outline-variant/40">
+                    <div class="w-9 h-9 rounded-xl bg-emerald-50 text-secondary flex items-center justify-center">
+                        <span class="material-symbols-outlined text-xl">account_tree</span>
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-black font-display text-primary uppercase tracking-wide">
+                            2. Jerarquía de Desglose (Drill-Down)
+                        </h2>
+                        <p class="text-xs text-on-surface-variant">Orden secuencial para navegación multinivel (ej: Región > Ciudad > Tienda).</p>
+                    </div>
+                </div>
+
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <p class="text-xs text-on-surface-variant">
+                            Arrastra o usa las flechas para ordenar de mayor a menor jerarquía:
+                        </p>
+                        <span class="text-[10px] text-slate-500 font-medium flex items-center gap-1 bg-slate-100 px-2 py-0.5 rounded-md border border-slate-200">
+                            <span class="material-symbols-outlined text-xs text-slate-500">drag_indicator</span> Drag & Drop activo
+                        </span>
+                    </div>
+                    <div id="contenedorJerarquia" class="space-y-2">
+                        <!-- Generado dinámicamente según dimensiones seleccionadas -->
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Columna Derecha: Reglas de Visualización y Sugeridor Plotly -->
+        <div class="lg:col-span-5 space-y-6">
+
+            <!-- Card 3: Evaluador Semántico Plotly -->
+            <div class="bg-white/90 backdrop-blur-md rounded-2xl p-6 border border-outline-variant/60 shadow-sm financial-card">
+                <div class="flex items-center gap-3 pb-4 mb-4 border-b border-outline-variant/40">
+                    <div class="w-9 h-9 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center">
+                        <span class="material-symbols-outlined text-xl">insights</span>
+                    </div>
+                    <div>
+                        <h2 class="text-sm font-black font-display text-primary uppercase tracking-wide">
+                            3. Compatibilidad de Visualizaciones
+                        </h2>
+                        <p class="text-xs text-on-surface-variant">Análisis automático según cardinalidad y tipología DuckDB.</p>
+                    </div>
+                </div>
+
+                <!-- Selectores de prueba de dimensión/métrica para sugerencia -->
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <div>
+                        <label class="block text-[11px] font-bold text-on-surface mb-1">Dimensión Primaria</label>
+                        <select id="selDimPrincipal" onchange="actualizarAnalisisCompatibilidad()" class="w-full text-xs px-2.5 py-2 bg-slate-50 border border-outline-variant rounded-xl font-medium">
+                            {% for col in columnasParquet %}
+                            {% if not col.esNumerico or col.esTemporal %}
+                            <option value="{{ col.nombre }}" {% if configuracionActual and configuracionActual.configuracionVisual.dimensionPredeterminada == col.nombre %}selected{% endif %}>{{ col.nombre }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-on-surface mb-1">Métrica Primaria</label>
+                        <select id="selMetricaPrincipal" onchange="actualizarAnalisisCompatibilidad()" class="w-full text-xs px-2.5 py-2 bg-slate-50 border border-outline-variant rounded-xl font-medium">
+                            {% for col in columnasParquet %}
+                            {% if col.esNumerico %}
+                            <option value="{{ col.nombre }}" {% if configuracionActual and configuracionActual.configuracionVisual.metricaPredeterminada == col.nombre %}selected{% endif %}>{{ col.nombre }}</option>
+                            {% endif %}
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Gráfico Predeterminado -->
+                <div class="mb-4">
+                    <label class="block text-xs font-bold text-on-surface mb-1">
+                        Gráfico Predeterminado al Cargar <span class="text-red-500">*</span>
+                    </label>
+                    <select id="selGraficoPredeterminado" class="w-full text-xs px-3 py-2.5 bg-primary/5 border border-primary/30 rounded-xl font-black text-primary">
+                        {% for g in graficosCatalogo %}
+                        <option value="{{ g.id }}" {% if configuracionActual and configuracionActual.configuracionVisual.graficoPredeterminado == g.id %}selected{% endif %}>
+                            {{ g.nombre }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Diagnóstico de Recomendaciones y Descartes -->
+                <div class="space-y-3">
+                    <label class="block text-[11px] font-bold uppercase tracking-wider text-slate-500">
+                        Diagnóstico de Compatibilidad Semántica
+                    </label>
+                    <div id="panelDiagnostico" class="space-y-2">
+                        <div class="p-3 bg-slate-50 border border-slate-200 rounded-xl text-xs text-slate-500 text-center animate-pulse">
+                            Analizando cardinalidades con DuckDB...
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Gráficos Permitidos para la Barra de Herramientas del Explorador -->
+                <div class="mt-5 pt-4 border-t border-outline-variant/40">
+                    <div class="flex items-center justify-between mb-1.5">
+                        <label class="block text-xs font-bold text-on-surface flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-sm text-primary">bar_chart</span>
+                            Tipos de Gráficos Permitidos en Barra de Herramientas
+                        </label>
+                        <span class="text-[10px] font-bold text-primary bg-primary/10 px-2 py-0.5 rounded-full border border-primary/20">
+                            Disponibles en Explorador
+                        </span>
+                    </div>
+                    <p class="text-[11px] text-on-surface-variant mb-3 leading-tight">
+                        Solo los gráficos marcados estarán disponibles para conmutar en el Explorador.
+                    </p>
+                    <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5" id="contenedorChecksGraficos">
+                        {% for g in graficosCatalogo %}
+                        <label class="group relative flex items-center gap-2.5 p-2.5 rounded-xl border border-outline-variant/70 bg-white hover:border-primary/60 hover:bg-primary/[0.03] hover:shadow-xs transition-all duration-150 cursor-pointer select-none has-[:checked]:border-primary has-[:checked]:bg-primary/[0.04] has-[:checked]:shadow-xs">
+                            <input type="checkbox" name="chkGraficosPermitidos" value="{{ g.id }}"
+                                {% if configuracionActual and g.id in configuracionActual.configuracionVisual.graficosPermitidos %}checked
+                                {% elif not configuracionActual %}checked{% endif %}
+                                class="w-4 h-4 rounded text-primary focus:ring-primary border-outline-variant cursor-pointer shrink-0">
+                            <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0 group-hover:scale-105 group-hover:bg-primary group-hover:text-white transition-all duration-150">
+                                <span class="material-symbols-outlined text-lg">{{ g.icono }}</span>
+                            </div>
+                            <div class="min-w-0 flex-1">
+                                <span class="font-bold text-xs text-slate-800 leading-tight block group-hover:text-primary transition-colors">
+                                    {{ g.nombre }}
+                                </span>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Card 4: Filtros de Negocio del Cubo (Inclusión / Exclusión) -->
+            <div class="bg-white/90 backdrop-blur-md rounded-2xl p-6 border border-outline-variant/60 shadow-sm space-y-4">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-outline-variant/40 pb-3">
+                    <div>
+                        <h4 class="font-display font-bold text-sm text-primary flex items-center gap-2">
+                            <span class="material-symbols-outlined text-base">filter_alt</span>
+                            Filtros de Negocio del Cubo (Inclusión / Exclusión)
+                        </h4>
+                        <p class="text-xs text-on-surface-variant mt-0.5">
+                            Reglas estáticas WHERE blindadas aplicadas automáticamente por el motor DuckDB (ej. <code>segmento != 'Corporativo'</code> o <code>genero == 'Femenino'</code>).
+                        </p>
+                    </div>
+                    <button type="button" onclick="agregarFilaFiltroCubo()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-all self-start sm:self-auto cursor-pointer">
+                        <span class="material-symbols-outlined text-sm">add</span>
+                        + Agregar Filtro al Cubo
+                    </button>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-surface-container-low text-on-surface-variant font-bold border-b border-outline-variant/40">
+                                <th class="py-2.5 px-3">Columna del Cubo</th>
+                                <th class="py-2.5 px-3">Operador</th>
+                                <th class="py-2.5 px-3">Valor / Expresión</th>
+                                <th class="py-2.5 px-3 text-center">Activo</th>
+                                <th class="py-2.5 px-3 text-right">Acción</th>
+                            </tr>
+                        </thead>
+                        <tbody id="contenedorFilasFiltrosCubo" class="divide-y divide-outline-variant/30 text-on-surface">
+                            <!-- Filas inyectadas por JS -->
+                        </tbody>
+                    </table>
+                </div>
+                <div id="mensajeSinFiltrosCubo" class="hidden p-3 bg-surface-container-low rounded-xl text-center text-xs text-outline italic">
+                    Sin filtros configurados. Toda la data del cubo estará disponible para agregación.
+                </div>
+            </div>
+
+            <!-- Card 5: Resumen de Contrato Semántico -->
+            <div class="bg-surface-container-low rounded-2xl p-5 border border-outline-variant/60 shadow-sm text-xs space-y-2">
+                <div class="flex items-center gap-2 text-primary font-bold">
+                    <span class="material-symbols-outlined text-sm">info</span>
+                    <span>Políticas de Seguridad y RLS</span>
+                </div>
+                <p class="text-on-surface-variant leading-relaxed text-[11px]">
+                    Al guardar esta configuración, cualquier consulta analítica en <code>/explorador</code> o descarga en <code>/api/olap/exportar</code> pasará de forma estricta por el validador semántico. Los campos ocultos no podrán ser proyectados vía inyección de queries.
+                </p>
+            </div>
+
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Notificaciones Toast -->
+<div id="toastNotificacion" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+    <div id="toastCuerpo" class="px-4 py-3 rounded-xl shadow-lg border text-xs font-bold flex items-center gap-2.5">
+        <span id="toastIcono" class="material-symbols-outlined text-base">info</span>
+        <span id="toastMensaje">Notificación</span>
+    </div>
+</div>
+
+<script>
+    const idVistaActual = "{{ vistaSeleccionada.idVista if vistaSeleccionada else '' }}";
+    const jerarquiaInicial = {% if configuracionActual and configuracionActual.granoPermitido and configuracionActual.granoPermitido.jerarquiaDrilldownPermitida %}{{ configuracionActual.granoPermitido.jerarquiaDrilldownPermitida | tojson }}{% else %}[]{% endif %};
+    const columnasParquetGlobal = {{ columnasParquet | tojson if columnasParquet else '[]' }};
+    const filtrosCuboIniciales = {% if configuracionActual and configuracionActual.filtrosCubo %}{{ configuracionActual.filtrosCubo | tojson }}{% else %}[]{% endif %};
+    let ordenJerarquia = [];
+    let elementoArrastrado = null;
+
+    function inicializarOrdenJerarquia() {
+        const checkedDims = Array.from(document.querySelectorAll('input[name="chkDimensiones"]:checked')).map(c => c.value);
+        ordenJerarquia = jerarquiaInicial.filter(d => checkedDims.includes(d));
+        checkedDims.forEach(d => {
+            if (!ordenJerarquia.includes(d)) {
+                ordenJerarquia.push(d);
+            }
+        });
+    }
+
+    function sincronizarDimensionConJerarquia(cb) {
+        if (cb.checked) {
+            if (!ordenJerarquia.includes(cb.value)) {
+                ordenJerarquia.push(cb.value);
+            }
+        } else {
+            ordenJerarquia = ordenJerarquia.filter(d => d !== cb.value);
+        }
+    }
+
+    function cambiarVista(id) {
+        if (id) {
+            window.location.href = `/configuracion-vistas?idVista=${id}`;
+        } else {
+            window.location.href = `/configuracion-vistas`;
+        }
+    }
+
+    function mostrarToast(mensaje, esError = false) {
+        const toast = document.getElementById('toastNotificacion');
+        const cuerpo = document.getElementById('toastCuerpo');
+        const icono = document.getElementById('toastIcono');
+        const spanMensaje = document.getElementById('toastMensaje');
+
+        let texto = mensaje;
+        if (Array.isArray(texto)) {
+            texto = texto.map(m => typeof m === 'object' ? (m.msg || m.error || JSON.stringify(m)) : m).join('; ');
+        } else if (typeof texto === 'object' && texto !== null) {
+            texto = texto.msg || texto.error || texto.detalle || JSON.stringify(texto);
+        }
+
+        spanMensaje.innerText = texto;
+        if (esError) {
+            cuerpo.className = "px-4 py-3 rounded-xl shadow-lg border text-xs font-bold flex items-center gap-2.5 bg-red-600 text-white border-red-700 max-w-2xl";
+            icono.innerText = "error";
+        } else {
+            cuerpo.className = "px-4 py-3 rounded-xl shadow-lg border text-xs font-bold flex items-center gap-2.5 bg-slate-900 text-white border-slate-800 max-w-2xl";
+            icono.innerText = "check_circle";
+        }
+
+        toast.classList.remove('translate-y-20', 'opacity-0');
+        setTimeout(() => {
+            toast.classList.add('translate-y-20', 'opacity-0');
+        }, 5000);
+    }
+
+    function alCambiarDimension(cb) {
+        sincronizarDimensionConJerarquia(cb);
+        actualizarExclusionesMutuas();
+        actualizarSelectoresPrincipales();
+        actualizarAnalisisCompatibilidad();
+    }
+
+    function alCambiarMetrica(cb) {
+        actualizarSelectoresPrincipales();
+        actualizarAnalisisCompatibilidad();
+    }
+
+    function actualizarExclusionesMutuas() {
+        const dimsChecked = Array.from(document.querySelectorAll('input[name="chkDimensiones"]:checked')).map(c => c.value);
+        
+        // Si una columna se selecciona como dimensión de grano, desaparece de las métricas numéricas
+        document.querySelectorAll('input[name="chkMetricas"]').forEach(chkMet => {
+            const col = chkMet.value;
+            const contenedor = document.getElementById(`contenedorMetrica_${col}`);
+            if (!contenedor) return;
+
+            if (dimsChecked.includes(col)) {
+                contenedor.classList.add('hidden');
+                chkMet.checked = false;
+            } else {
+                contenedor.classList.remove('hidden');
+            }
+        });
+    }
+
+    function actualizarSelectoresPrincipales() {
+        const dimsChecked = Array.from(document.querySelectorAll('input[name="chkDimensiones"]:checked')).map(c => c.value);
+        const metsChecked = Array.from(document.querySelectorAll('input[name="chkMetricas"]:checked')).map(c => c.value);
+
+        const selDim = document.getElementById('selDimPrincipal');
+        const selMet = document.getElementById('selMetricaPrincipal');
+
+        if (selDim) {
+            const valorPrevio = selDim.value;
+            selDim.innerHTML = '';
+            dimsChecked.forEach(d => {
+                const opt = document.createElement('option');
+                opt.value = d;
+                opt.textContent = d;
+                if (d === valorPrevio) opt.selected = true;
+                selDim.appendChild(opt);
+            });
+            if (!selDim.value && dimsChecked.length > 0) selDim.value = dimsChecked[0];
+        }
+
+        if (selMet) {
+            const valorPrevio = selMet.value;
+            selMet.innerHTML = '';
+            metsChecked.forEach(m => {
+                const opt = document.createElement('option');
+                opt.value = m;
+                opt.textContent = m;
+                if (m === valorPrevio) opt.selected = true;
+                selMet.appendChild(opt);
+            });
+            if (!selMet.value && metsChecked.length > 0) selMet.value = metsChecked[0];
+        }
+    }
+
+    function moverJerarquia(index, direccion) {
+        const nuevoIndex = index + direccion;
+        if (nuevoIndex < 0 || nuevoIndex >= ordenJerarquia.length) return;
+        const [item] = ordenJerarquia.splice(index, 1);
+        ordenJerarquia.splice(nuevoIndex, 0, item);
+        renderizarJerarquia();
+    }
+
+    function sincronizarJerarquia() {
+        const checkedDims = Array.from(document.querySelectorAll('input[name="chkDimensiones"]:checked')).map(c => c.value);
+        if (ordenJerarquia.length === 0 && checkedDims.length > 0) {
+            inicializarOrdenJerarquia();
+        } else {
+            ordenJerarquia = ordenJerarquia.filter(d => checkedDims.includes(d));
+            checkedDims.forEach(d => {
+                if (!ordenJerarquia.includes(d)) {
+                    ordenJerarquia.push(d);
+                }
+            });
+        }
+        renderizarJerarquia();
+    }
+
+    function renderizarJerarquia() {
+        const contenedor = document.getElementById('contenedorJerarquia');
+        if (!contenedor) return;
+
+        if (ordenJerarquia.length === 0) {
+            contenedor.innerHTML = `
+                <div class="p-4 rounded-xl border border-dashed border-outline-variant text-center bg-surface-container-lowest/50">
+                    <span class="material-symbols-outlined text-slate-300 text-2xl block mb-1">account_tree</span>
+                    <p class="text-[11px] text-slate-400 italic">Marca dimensiones en la Sección 1 para construir la jerarquía de drill-down.</p>
+                </div>`;
+            return;
+        }
+
+        let html = '';
+        const total = ordenJerarquia.length;
+        ordenJerarquia.forEach((dim, idx) => {
+            const esPrimero = idx === 0;
+            const esUltimo = idx === total - 1;
+            const nivelTexto = esPrimero ? 'Nivel 1 (Mayor jerarquía)' : (esUltimo ? `Nivel ${idx + 1} (Menor jerarquía)` : `Nivel ${idx + 1}`);
+
+            html += `
+            <div class="item-jerarquia flex items-center justify-between p-2.5 rounded-xl bg-surface-container-lowest border border-outline-variant/70 text-xs transition-all duration-150 shadow-xs cursor-grab active:cursor-grabbing hover:border-primary/50 group select-none"
+                 draggable="true"
+                 data-dimension="${dim}"
+                 data-index="${idx}">
+                <div class="flex items-center gap-2.5 pointer-events-none">
+                    <span class="material-symbols-outlined text-slate-400 group-hover:text-primary transition-colors text-base" title="Arrastra para reordenar">drag_indicator</span>
+                    <span class="w-5 h-5 rounded-full bg-primary/10 text-primary flex items-center justify-center font-black text-[10px]">${idx + 1}</span>
+                    <span class="font-bold text-slate-800">${dim}</span>
+                </div>
+                <div class="flex items-center gap-1.5">
+                    <span class="text-[10px] text-slate-400 font-mono uppercase mr-1">${nivelTexto}</span>
+                    <button type="button" onclick="moverJerarquia(${idx}, -1)" ${esPrimero ? 'disabled' : ''} 
+                            class="w-6 h-6 rounded-lg flex items-center justify-center text-slate-400 hover:text-primary hover:bg-slate-100 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors" title="Subir nivel">
+                        <span class="material-symbols-outlined text-sm">arrow_upward</span>
+                    </button>
+                    <button type="button" onclick="moverJerarquia(${idx}, 1)" ${esUltimo ? 'disabled' : ''} 
+                            class="w-6 h-6 rounded-lg flex items-center justify-center text-slate-400 hover:text-primary hover:bg-slate-100 disabled:opacity-20 disabled:hover:bg-transparent disabled:hover:text-slate-400 transition-colors" title="Bajar nivel">
+                        <span class="material-symbols-outlined text-sm">arrow_downward</span>
+                    </button>
+                </div>
+            </div>
+            `;
+        });
+
+        if (total > 1) {
+            html += `
+            <div class="mt-3 pt-2.5 border-t border-outline-variant/40 flex items-center gap-1.5 overflow-x-auto text-[11px] text-slate-500 py-1">
+                <span class="font-semibold text-slate-400 text-[10px] uppercase tracking-wider flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs text-primary">route</span> Secuencia:
+                </span>
+                ${ordenJerarquia.map((d, i) => `
+                    <span class="px-2 py-0.5 rounded-md bg-slate-100 font-medium text-slate-700 border border-slate-200 whitespace-nowrap">${d}</span>
+                    ${i < total - 1 ? '<span class="text-slate-400 font-bold">➔</span>' : ''}
+                `).join('')}
+            </div>`;
+        }
+
+        contenedor.innerHTML = html;
+        adjuntarEventosDragAndDrop();
+    }
+
+    function adjuntarEventosDragAndDrop() {
+        const items = document.querySelectorAll('.item-jerarquia');
+        items.forEach(item => {
+            item.addEventListener('dragstart', (e) => {
+                elementoArrastrado = item;
+                e.dataTransfer.effectAllowed = 'move';
+                e.dataTransfer.setData('text/plain', item.dataset.index);
+                setTimeout(() => {
+                    item.classList.add('opacity-40', 'border-dashed', 'border-primary', 'bg-primary/5');
+                }, 0);
+            });
+
+            item.addEventListener('dragend', () => {
+                item.classList.remove('opacity-40', 'border-dashed', 'border-primary', 'bg-primary/5');
+                document.querySelectorAll('.item-jerarquia').forEach(el => {
+                    el.classList.remove('border-t-2', 'border-b-2', 'border-primary', 'bg-blue-50/40');
+                });
+                elementoArrastrado = null;
+            });
+
+            item.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+                if (!elementoArrastrado || elementoArrastrado === item) return;
+
+                const targetIndex = parseInt(item.dataset.index);
+                const sourceIndex = parseInt(elementoArrastrado.dataset.index);
+
+                document.querySelectorAll('.item-jerarquia').forEach(el => {
+                    if (el !== item) el.classList.remove('border-t-2', 'border-b-2', 'border-primary', 'bg-blue-50/40');
+                });
+
+                item.classList.add('bg-blue-50/40');
+                if (sourceIndex < targetIndex) {
+                    item.classList.add('border-b-2', 'border-primary');
+                    item.classList.remove('border-t-2');
+                } else {
+                    item.classList.add('border-t-2', 'border-primary');
+                    item.classList.remove('border-b-2');
+                }
+            });
+
+            item.addEventListener('dragleave', () => {
+                item.classList.remove('border-t-2', 'border-b-2', 'border-primary', 'bg-blue-50/40');
+            });
+
+            item.addEventListener('drop', (e) => {
+                e.preventDefault();
+                item.classList.remove('border-t-2', 'border-b-2', 'border-primary', 'bg-blue-50/40');
+
+                if (!elementoArrastrado || elementoArrastrado === item) return;
+
+                const sourceIndex = parseInt(elementoArrastrado.dataset.index);
+                const targetIndex = parseInt(item.dataset.index);
+
+                if (!isNaN(sourceIndex) && !isNaN(targetIndex) && sourceIndex !== targetIndex) {
+                    const [dimMovida] = ordenJerarquia.splice(sourceIndex, 1);
+                    ordenJerarquia.splice(targetIndex, 0, dimMovida);
+                    renderizarJerarquia();
+                }
+            });
+        });
+    }
+
+    async function actualizarAnalisisCompatibilidad() {
+        if (!idVistaActual) return;
+        sincronizarJerarquia();
+
+        const dimPrincipal = document.getElementById('selDimPrincipal')?.value;
+        const metPrincipal = document.getElementById('selMetricaPrincipal')?.value;
+        const dimensionesSeleccionadas = Array.from(document.querySelectorAll('input[name="chkDimensiones"]:checked')).map(cb => cb.value);
+
+        const cuerpo = {
+            idVista: parseInt(idVistaActual),
+            dimensionPrincipal: dimPrincipal,
+            metricaPrincipal: metPrincipal,
+            dimensionesAdicionales: dimensionesSeleccionadas.filter(d => d !== dimPrincipal)
+        };
+
+        const panel = document.getElementById('panelDiagnostico');
+        if (!panel) return;
+
+        try {
+            const respuesta = await fetch('/api/vistas/analizar-compatibilidad', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(cuerpo)
+            });
+
+            const datos = await respuesta.json();
+            if (!datos.exito) {
+                panel.innerHTML = `<p class="text-xs text-red-500">Error en análisis de compatibilidad.</p>`;
+                return;
+            }
+
+            const a = datos.analisis;
+            let html = '';
+
+            if (a.recomendados && a.recomendados.length > 0) {
+                a.recomendados.forEach(rec => {
+                    html += `
+                    <div class="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200/80 text-xs">
+                        <div class="flex items-center justify-between font-bold text-emerald-900">
+                            <span class="flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-sm text-emerald-700">check_circle</span>
+                                ${rec.nombre}
+                            </span>
+                            <span class="text-[10px] bg-emerald-200/60 px-2 py-0.5 rounded-full font-black text-emerald-800">${rec.puntuacion}% compatibilidad</span>
+                        </div>
+                        <p class="text-[11px] text-emerald-800 mt-1">${rec.motivo}</p>
+                    </div>
+                    `;
+                });
+            }
+
+            if (a.descartados && a.descartados.length > 0) {
+                a.descartados.forEach(desc => {
+                    html += `
+                    <div class="p-2.5 rounded-xl bg-slate-50 border border-slate-200 text-xs opacity-75">
+                        <div class="font-bold text-slate-700 flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-sm text-amber-600">block</span>
+                            ${desc.nombre || desc.tipo} (Descartado)
+                        </div>
+                        <p class="text-[11px] text-slate-500 mt-0.5">${desc.motivo}</p>
+                    </div>
+                    `;
+                });
+            }
+
+            panel.innerHTML = html;
+
+            // Actualizar sugerido en selector si está en blanco
+            const selPredeterminado = document.getElementById('selGraficoPredeterminado');
+            if (selPredeterminado && a.sugeridoPrincipal && (!selPredeterminado.value || selPredeterminado.dataset.autoseleccionado === "true")) {
+                selPredeterminado.value = a.sugeridoPrincipal;
+                selPredeterminado.dataset.autoseleccionado = "true";
+            }
+
+        } catch (error) {
+            panel.innerHTML = `<p class="text-xs text-red-500">Error de conexión al analizar.</p>`;
+        }
+    }
+
+    async function guardarConfiguracionCompleta() {
+        if (!idVistaActual) return;
+
+        const btnGuardar = document.getElementById('btnGuardarConfiguracion');
+        btnGuardar.disabled = true;
+        btnGuardar.classList.add('opacity-50', 'cursor-not-allowed');
+
+        try {
+            // Recoger dimensiones permitidas
+            const dimsPermitidas = Array.from(document.querySelectorAll('input[name="chkDimensiones"]:checked')).map(cb => cb.value);
+            if (dimsPermitidas.length === 0) {
+                mostrarToast("Debes seleccionar al menos una dimensión permitida.", true);
+                btnGuardar.disabled = false;
+                btnGuardar.classList.remove('opacity-50', 'cursor-not-allowed');
+                return;
+            }
+
+            // Recoger métricas permitidas
+            const metricasPermitidas = [];
+            document.querySelectorAll('input[name="chkMetricas"]:checked').forEach(cb => {
+                const nombreMetrica = cb.value;
+                const operacion = document.getElementById(`agregacion_${nombreMetrica}`)?.value || "SUM";
+                metricasPermitidas.push({
+                    columna: nombreMetrica,
+                    campo: nombreMetrica,
+                    operacion: operacion,
+                    agregacion: operacion,
+                    alias: `${nombreMetrica} (${operacion})`,
+                    etiqueta: `${nombreMetrica} (${operacion})`
+                });
+            });
+
+            if (metricasPermitidas.length === 0) {
+                mostrarToast("Debes seleccionar al menos una métrica agregable.", true);
+                btnGuardar.disabled = false;
+                btnGuardar.classList.remove('opacity-50', 'cursor-not-allowed');
+                return;
+            }
+
+            const bloquearDetalle = document.getElementById('chkBloquearNivelDetalle').checked;
+
+            // Jerarquía de Drill-down según orden configurado por Drag & Drop / Flechas
+            const jerarquiaDrillDown = ordenJerarquia.filter(d => dimsPermitidas.includes(d));
+            dimsPermitidas.forEach(d => {
+                if (!jerarquiaDrillDown.includes(d)) {
+                    jerarquiaDrillDown.push(d);
+                }
+            });
+
+            // Recoger gráficos permitidos
+            const graficosPermitidos = Array.from(document.querySelectorAll('input[name="chkGraficosPermitidos"]:checked')).map(cb => cb.value);
+            const graficoPredeterminado = document.getElementById('selGraficoPredeterminado').value;
+            const dimensionPredeterminada = document.getElementById('selDimPrincipal').value;
+            const metricaPredeterminada = document.getElementById('selMetricaPrincipal').value;
+
+            const payload = {
+                idVista: parseInt(idVistaActual),
+                granoPermitido: {
+                    dimensionesVisibles: dimsPermitidas,
+                    metricas: metricasPermitidas,
+                    jerarquiaDrilldownPermitida: jerarquiaDrillDown,
+                    permitirDrilldown: true
+                },
+                politicaGobernanza: {
+                    bloquearNivelDetalle: bloquearDetalle,
+                    columnasExcluidas: [],
+                    permitirExportarDetalle: false,
+                    tipoExportacionPermitida: "SOLO_RESUMEN_AGREGADO"
+                },
+                configuracionVisual: {
+                    graficosPermitidos: graficosPermitidos,
+                    graficoPredeterminado: graficoPredeterminado,
+                    dimensionPredeterminada: dimensionPredeterminada,
+                    metricaPredeterminada: metricaPredeterminada,
+                    paletaColores: ["#004482", "#006e20", "#005cab", "#0284c7", "#d97706", "#dc2626"]
+                },
+                filtrosCubo: obtenerFiltrosCuboConfigurados()
+            };
+
+            const respuesta = await fetch('/api/vistas/guardar-configuracion', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+
+            const datos = await respuesta.json();
+            if (respuesta.ok && datos.exito) {
+                mostrarToast(datos.mensaje || "Configuración guardada exitosamente.");
+            } else {
+                let errStr = "Error al guardar configuración.";
+                if (datos.error) {
+                    errStr = datos.error;
+                } else if (datos.detail) {
+                    if (Array.isArray(datos.detail)) {
+                        errStr = datos.detail.map(d => `${d.loc ? d.loc.slice(-1)[0] : 'Campo'}: ${d.msg}`).join('; ');
+                    } else if (typeof datos.detail === 'string') {
+                        errStr = datos.detail;
+                    } else {
+                        errStr = JSON.stringify(datos.detail);
+                    }
+                } else if (datos.mensaje) {
+                    errStr = datos.mensaje;
+                }
+                mostrarToast(errStr, true);
+            }
+        } catch (err) {
+            mostrarToast("Fallo en la comunicación con el servidor: " + err.message, true);
+        } finally {
+            btnGuardar.disabled = false;
+            btnGuardar.classList.remove('opacity-50', 'cursor-not-allowed');
+        }
+    }
+
+    let contadorFiltrosCubo = 0;
+
+    function renderizarFiltrosCuboIniciales() {
+        const contenedor = document.getElementById('contenedorFilasFiltrosCubo');
+        if (!contenedor) return;
+        contenedor.innerHTML = '';
+        if (filtrosCuboIniciales && filtrosCuboIniciales.length > 0) {
+            filtrosCuboIniciales.forEach(f => {
+                agregarFilaFiltroCubo(f.columna, f.operador, f.valor, f.activo);
+            });
+        } else {
+            actualizarEstadoMensajeFiltros();
+        }
+    }
+
+    function actualizarEstadoMensajeFiltros() {
+        const contenedor = document.getElementById('contenedorFilasFiltrosCubo');
+        const mensaje = document.getElementById('mensajeSinFiltrosCubo');
+        if (!contenedor || !mensaje) return;
+        if (contenedor.children.length === 0) {
+            mensaje.classList.remove('hidden');
+        } else {
+            mensaje.classList.add('hidden');
+        }
+    }
+
+    function agregarFilaFiltroCubo(columnaDef = '', operadorDef = '=', valorDef = '', activoDef = true) {
+        const contenedor = document.getElementById('contenedorFilasFiltrosCubo');
+        if (!contenedor) return;
+        const id = ++contadorFiltrosCubo;
+
+        let optsCol = '<option value="">-- Seleccionar Columna --</option>';
+        columnasParquetGlobal.forEach(c => {
+            const sel = (c.nombre === columnaDef) ? 'selected' : '';
+            const tipoDesc = c.esNumerico ? 'Numérico' : (c.esTemporal ? 'Fecha' : 'Texto');
+            optsCol += `<option value="${c.nombre}" data-tipo="${tipoDesc.toLowerCase()}" ${sel}>${c.nombre} (${c.tipo})</option>`;
+        });
+
+        const operadores = [
+            { val: '=', txt: '= (Igual a)' },
+            { val: '!=', txt: '!= (Distinto de)' },
+            { val: '>', txt: '> (Mayor que)' },
+            { val: '>=', txt: '>= (Mayor o igual)' },
+            { val: '<', txt: '< (Menor que)' },
+            { val: '<=', txt: '<= (Menor o igual)' },
+            { val: 'IN', txt: 'IN (En lista: a, b, c)' },
+            { val: 'NOT IN', txt: 'NOT IN (No en lista: a, b, c)' },
+            { val: 'LIKE', txt: 'LIKE (Contiene / Patrón)' },
+            { val: 'NOT LIKE', txt: 'NOT LIKE (No contiene)' },
+            { val: 'IS NOT NULL', txt: 'IS NOT NULL (Tiene valor)' },
+            { val: 'IS NULL', txt: 'IS NULL (Es nulo / vacío)' }
+        ];
+
+        let optsOp = '';
+        operadores.forEach(op => {
+            const sel = (op.val === operadorDef) ? 'selected' : '';
+            optsOp += `<option value="${op.val}" ${sel}>${op.txt}</option>`;
+        });
+
+        const esNullOp = (operadorDef === 'IS NULL' || operadorDef === 'IS NOT NULL');
+
+        const tr = document.createElement('tr');
+        tr.id = `filaFiltroCubo_${id}`;
+        tr.className = "hover:bg-surface-container-low/40 transition-colors fila-filtro-cubo";
+        tr.innerHTML = `
+            <td class="py-2.5 px-3">
+                <select id="selFiltroCol_${id}" class="selFiltroColumna w-full bg-white border border-outline-variant rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-primary focus:border-primary">
+                    ${optsCol}
+                </select>
+            </td>
+            <td class="py-2.5 px-3">
+                <select id="selFiltroOp_${id}" onchange="alCambiarOperadorFiltro(${id})" class="selFiltroOperador w-full bg-white border border-outline-variant rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800 focus:border-primary">
+                    ${optsOp}
+                </select>
+            </td>
+            <td class="py-2.5 px-3">
+                <input type="text" id="valFiltro_${id}" value="${valorDef || ''}" ${esNullOp ? 'disabled' : ''} placeholder="${esNullOp ? '(No requiere valor)' : 'ej. Corporativo'}" class="inputFiltroValor w-full bg-white border border-outline-variant rounded-lg px-2.5 py-1.5 text-xs text-on-surface font-bold focus:border-primary ${esNullOp ? 'opacity-50 cursor-not-allowed bg-slate-100' : ''}">
+            </td>
+            <td class="py-2.5 px-3 text-center">
+                <input type="checkbox" id="chkFiltroActivo_${id}" ${activoDef ? 'checked' : ''} class="chkFiltroActivo rounded text-primary focus:ring-0">
+            </td>
+            <td class="py-2.5 px-3 text-right">
+                <button type="button" onclick="eliminarFilaFiltroCubo(${id})" title="Eliminar filtro" class="p-1 text-slate-400 hover:text-error hover:bg-error/10 rounded-lg transition-colors cursor-pointer">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+            </td>
+        `;
+
+        contenedor.appendChild(tr);
+        actualizarEstadoMensajeFiltros();
+    }
+
+    function alCambiarOperadorFiltro(id) {
+        const selOp = document.getElementById(`selFiltroOp_${id}`);
+        const inputVal = document.getElementById(`valFiltro_${id}`);
+        if (!selOp || !inputVal) return;
+        const op = selOp.value;
+        if (op === 'IS NULL' || op === 'IS NOT NULL') {
+            inputVal.disabled = true;
+            inputVal.value = '';
+            inputVal.placeholder = '(No requiere valor)';
+            inputVal.classList.add('opacity-50', 'cursor-not-allowed', 'bg-slate-100');
+        } else {
+            inputVal.disabled = false;
+            inputVal.placeholder = op.includes('IN') ? 'ej. Val1, Val2' : 'ej. Valor de filtro';
+            inputVal.classList.remove('opacity-50', 'cursor-not-allowed', 'bg-slate-100');
+        }
+    }
+
+    function eliminarFilaFiltroCubo(id) {
+        const fila = document.getElementById(`filaFiltroCubo_${id}`);
+        if (fila) fila.remove();
+        actualizarEstadoMensajeFiltros();
+    }
+
+    function obtenerFiltrosCuboConfigurados() {
+        const contenedor = document.getElementById('contenedorFilasFiltrosCubo');
+        if (!contenedor) return [];
+        const filas = contenedor.querySelectorAll('.fila-filtro-cubo');
+        const filtros = [];
+        filas.forEach(f => {
+            const colSel = f.querySelector('.selFiltroColumna');
+            const opSel = f.querySelector('.selFiltroOperador');
+            const valInput = f.querySelector('.inputFiltroValor');
+            const actChk = f.querySelector('.chkFiltroActivo');
+
+            const col = colSel ? colSel.value : '';
+            const op = opSel ? opSel.value : '=';
+            const val = valInput ? valInput.value : '';
+            const act = actChk ? actChk.checked : true;
+            const tipoDato = colSel && colSel.selectedOptions[0] ? (colSel.selectedOptions[0].dataset.tipo || 'texto') : 'texto';
+
+            if (col && (val.trim() !== '' || op === 'IS NULL' || op === 'IS NOT NULL')) {
+                filtros.push({
+                    columna: col,
+                    operador: op,
+                    valor: val.trim(),
+                    tipoDato: tipoDato,
+                    activo: act
+                });
+            }
+        });
+        return filtros;
+    }
+
+    // Inicializar exclusiones mutuas y análisis al cargar la página si hay vista seleccionada
+    document.addEventListener('DOMContentLoaded', () => {
+        if (idVistaActual) {
+            inicializarOrdenJerarquia();
+            actualizarExclusionesMutuas();
+            actualizarSelectoresPrincipales();
+            actualizarAnalisisCompatibilidad();
+            renderizarFiltrosCuboIniciales();
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,102 @@
+# ==============================================================================
+# .gitignore - Cubix (Sistema de Inteligencia Analitica y Cubos OLAP)
+# ==============================================================================
+
+# --- SECRETOS Y CADENAS DE CONEXION (CRITICO) ---
+# NUNCA subir credenciales de produccion, base de datos ni tokens a Git
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.pfx
+secrets/
+
+# --- ENTORNOS VIRTUALES Y PAQUETES ---
+.venv/
+venv/
+env/
+ENV/
+env.bak/
+venv.bak/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# --- CACHES Y COMPILADOS DE PYTHON ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+
+# --- PRUEBAS, COBERTURA, SCRIPTS DE VALIDACION Y DATOS DE PRUEBA ---
+.pytest_cache/
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+*.cover
+*.py,cover
+.hypothesis/
+.ruff_cache/
+.mypy_cache/
+test_*.py
+*_test.py
+*pruebas*.py
+pruebas*.py
+baseDatos/probar*.py
+baseDatos/verificar*.py
+baseDatos/generar*.py
+baseDatos/limpiar*.py
+datosPrueba/
+
+# --- DOCUMENTOS MARKDOWN AUXILIARES (SOLO SUBIR README.md) ---
+*.md
+!README.md
+
+# --- DATA LAKE Y ALMACENAMIENTO DINAMICO (PARQUETS Y BASES DE DATOS LOCALES) ---
+# Los archivos Parquet se generan en tiempo de ejecucion y no deben sobrecargar el repositorio
+sistemaAnalitica/almacenamiento/parquets/*.parquet
+!sistemaAnalitica/almacenamiento/parquets/.gitkeep
+sistemaAnalitica/almacenamiento/parquets_backup/
+sistemaAnalitica/almacenamiento/*.db
+sistemaAnalitica/almacenamiento/*.sqlite
+sistemaAnalitica/almacenamiento/*.sqlite3
+sistemaAnalitica/almacenamiento/duckdb/*.db
+
+# --- ARCHIVOS DE REGISTRO (LOGS) ---
+*.log
+logs/
+*.log.*
+
+# --- HERRAMIENTAS Y AGENTES IA LOCALES ---
+.agents/
+
+# --- CONFIGURACIONES DE IDE Y EDITORES ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.pydevproject
+.settings/
+
+# --- ARCHIVOS DE SISTEMA OPERATIVO ---
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/

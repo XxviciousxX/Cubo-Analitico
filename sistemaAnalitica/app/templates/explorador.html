@@ -1,0 +1,790 @@
+{% extends "base.html" %}
+
+{% block title %}Explorador de Cubos Analíticos | Sistema Analítico{% endblock %}
+{% block page_title %}Explorador de Vistas{% endblock %}
+
+{% block extra_head %}
+<style>
+    #contenedorPlotlyPrincipal .plotly .point,
+    #contenedorPlotlyPrincipal .plotly .bars path,
+    #contenedorPlotlyPrincipal .plotly .slice path,
+    #contenedorPlotlyPrincipal .plotly .slicetext,
+    #contenedorPlotlyPrincipal .plotly .bartext,
+    #contenedorPlotlyPrincipal .plotly .trace.scatter .point,
+    #contenedorPlotlyPrincipal .plotly .treemap .surface {
+        cursor: pointer !important;
+    }
+</style>
+{% endblock %}
+
+{% set ruta_activa = 'explorador' %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto pb-12">
+    <!-- Encabezado del Explorador con Selector de Cubo -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 border-b border-outline-variant/60 pb-5">
+        <div>
+            <h1 class="text-2xl md:text-3xl font-black font-display text-primary flex items-center gap-3">
+                <span class="material-symbols-outlined text-3xl">insights</span>
+                Explorador OLAP y Gráficos Interactivos
+            </h1>
+            <p class="text-sm text-on-surface-variant mt-1 font-medium">
+                Cubo analítico activo: <span class="font-bold text-primary">{{ vista_actual.nombreVista }}</span> ({{ vista_actual.codigoVista }})
+            </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <select id="selCubo" onchange="cambiarCubo(this.value)" class="bg-white border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface focus:border-primary focus:outline-none shadow-xs">
+                {% for v in vistas %}
+                <option value="{{ v.codigoVista }}" {% if v.codigoVista == vista_actual.codigoVista %}selected{% endif %}>
+                    {{ v.nombreVista }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+    </div>
+
+    <!-- Barra Superior de KPIs Sintéticos -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div class="financial-card bg-white p-4 rounded-xl border border-outline-variant/60 shadow-xs">
+            <span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Filas Agregadas</span>
+            <div class="font-display text-2xl font-black text-primary mt-1" id="kpiTotalFilas">{{ total_filas }}</div>
+            <p class="text-[10px] text-outline mt-0.5">Grupos del cubo analítico</p>
+        </div>
+
+        <div class="financial-card bg-white p-4 rounded-xl border border-outline-variant/60 shadow-xs">
+            <span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Suma Total (Métrica Principal)</span>
+            <div class="font-display text-2xl font-black text-secondary mt-1" id="kpiSumaTotal">{{ kpi_suma_principal }}</div>
+            <p class="text-[10px] text-outline mt-0.5" id="kpiNomSuma">{{ metrica_seleccionada }}</p>
+        </div>
+
+        <div class="financial-card bg-white p-4 rounded-xl border border-outline-variant/60 shadow-xs">
+            <span class="text-[11px] font-bold text-on-surface-variant uppercase tracking-wider">Promedio General</span>
+            <div class="font-display text-2xl font-black text-primary mt-1" id="kpiPromedio">{{ kpi_promedio_principal }}</div>
+            <p class="text-[10px] text-outline mt-0.5">Media ponderada</p>
+        </div>
+    </div>
+
+    <!-- Barra de Navegación Drill-Down, Dimensiones, Métricas y Selector de Visualización -->
+    <div class="bg-white p-4 rounded-xl border border-outline-variant/60 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+        <!-- Migas de Pan -->
+        <div class="flex items-center gap-2 text-xs w-full md:w-auto" id="barraMigas">
+            <span class="material-symbols-outlined text-primary text-base">pin_drop</span>
+            <span class="font-bold text-on-surface-variant">Nivel:</span>
+            <span class="px-2.5 py-1 rounded-lg bg-surface-container font-mono font-bold text-primary truncate max-w-xs" id="textoMigaActual">Inicio (Macro)</span>
+            <button id="btnRestablecer" onclick="restablecerMacro()" class="hidden px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[11px] font-bold rounded-lg transition-all items-center gap-1">
+                <span class="material-symbols-outlined text-xs">refresh</span> Restablecer
+            </button>
+        </div>
+
+        <!-- Controles de Dimensión, Métrica y Tipo de Gráfico -->
+        <div class="flex flex-wrap items-center gap-3 text-xs w-full md:w-auto justify-end">
+            <!-- Selector de Dimensión -->
+            <div class="flex items-center gap-1.5">
+                <span class="font-bold text-on-surface-variant">Dimensión:</span>
+                <select id="selDimension" onchange="actualizarGraficos()" class="bg-surface-container-low border border-outline-variant rounded-lg px-2.5 py-1.5 font-bold text-on-surface focus:border-primary focus:outline-none">
+                    {% for d in dimensiones %}
+                    <option value="{{ d }}" {% if d == dimension_seleccionada %}selected{% endif %}>{{ d }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Selector de Dimensión Secundaria (Desglose por Moneda / Serie) -->
+            <div class="flex items-center gap-1.5">
+                <span class="font-bold text-on-surface-variant">Desglose (Serie):</span>
+                <select id="selDimensionSecundaria" onchange="actualizarGraficos()" class="bg-surface-container-low border border-outline-variant rounded-lg px-2.5 py-1.5 font-bold text-on-surface focus:border-primary focus:outline-none">
+                    <option value="">(Ninguno)</option>
+                    {% for d in dimensiones %}
+                    <option value="{{ d }}">{{ d }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Selector de Métrica -->
+            <div class="flex items-center gap-1.5">
+                <span class="font-bold text-on-surface-variant">Métrica:</span>
+                <select id="selMetrica" onchange="actualizarGraficos()" class="bg-surface-container-low border border-outline-variant rounded-lg px-2.5 py-1.5 font-bold text-on-surface focus:border-primary focus:outline-none">
+                    {% for m in metricas %}
+                    <option value="{{ m }}" {% if m == metrica_seleccionada %}selected{% endif %}>{{ m }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- Barra de Herramientas Dinámica de Gráficos Permitidos -->
+            <div class="flex items-center gap-1 border-l border-outline-variant/60 pl-3">
+                <span class="font-bold text-on-surface-variant mr-1">Vista:</span>
+                <div class="inline-flex rounded-lg bg-slate-100 p-0.5" id="toolbarGraficos">
+                    {% if 'pie' in graficos_permitidos %}
+                    <button type="button" onclick="conmutarTipoGrafico('pie')" id="btnTipo_pie" title="Gráfico Circular" class="btn-tipo-grafico px-2.5 py-1 rounded-md text-xs font-bold transition-all {% if grafico_predeterminado == 'pie' %}bg-white text-primary shadow-xs{% else %}text-slate-600 hover:text-primary{% endif %}">
+                        <span class="material-symbols-outlined text-sm align-middle">pie_chart</span>
+                    </button>
+                    {% endif %}
+
+                    {% if 'bar' in graficos_permitidos %}
+                    <button type="button" onclick="conmutarTipoGrafico('bar')" id="btnTipo_bar" title="Gráfico de Barras" class="btn-tipo-grafico px-2.5 py-1 rounded-md text-xs font-bold transition-all {% if grafico_predeterminado == 'bar' %}bg-white text-primary shadow-xs{% else %}text-slate-600 hover:text-primary{% endif %}">
+                        <span class="material-symbols-outlined text-sm align-middle">bar_chart</span>
+                    </button>
+                    {% endif %}
+
+                    {% if 'line' in graficos_permitidos %}
+                    <button type="button" onclick="conmutarTipoGrafico('line')" id="btnTipo_line" title="Gráfico de Líneas" class="btn-tipo-grafico px-2.5 py-1 rounded-md text-xs font-bold transition-all {% if grafico_predeterminado == 'line' %}bg-white text-primary shadow-xs{% else %}text-slate-600 hover:text-primary{% endif %}">
+                        <span class="material-symbols-outlined text-sm align-middle">show_chart</span>
+                    </button>
+                    {% endif %}
+
+                    {% if 'area' in graficos_permitidos %}
+                    <button type="button" onclick="conmutarTipoGrafico('area')" id="btnTipo_area" title="Gráfico de Área" class="btn-tipo-grafico px-2.5 py-1 rounded-md text-xs font-bold transition-all {% if grafico_predeterminado == 'area' %}bg-white text-primary shadow-xs{% else %}text-slate-600 hover:text-primary{% endif %}">
+                        <span class="material-symbols-outlined text-sm align-middle">area_chart</span>
+                    </button>
+                    {% endif %}
+
+                    {% if 'treemap' in graficos_permitidos %}
+                    <button type="button" onclick="conmutarTipoGrafico('treemap')" id="btnTipo_treemap" title="Mapa de Árbol" class="btn-tipo-grafico px-2.5 py-1 rounded-md text-xs font-bold transition-all {% if grafico_predeterminado == 'treemap' %}bg-white text-primary shadow-xs{% else %}text-slate-600 hover:text-primary{% endif %}">
+                        <span class="material-symbols-outlined text-sm align-middle">grid_view</span>
+                    </button>
+                    {% endif %}
+
+                    {% if 'scatter' in graficos_permitidos %}
+                    <button type="button" onclick="conmutarTipoGrafico('scatter')" id="btnTipo_scatter" title="Dispersión" class="btn-tipo-grafico px-2.5 py-1 rounded-md text-xs font-bold transition-all {% if grafico_predeterminado == 'scatter' %}bg-white text-primary shadow-xs{% else %}text-slate-600 hover:text-primary{% endif %}">
+                        <span class="material-symbols-outlined text-sm align-middle">scatter_plot</span>
+                    </button>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Contenedor Principal de Visualización Plotly Adaptativa -->
+    <div class="bg-white/90 backdrop-blur-md p-6 rounded-2xl border border-outline-variant/60 shadow-sm financial-card">
+        <div class="flex items-center justify-between mb-3 border-b border-outline-variant/40 pb-3">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-xl" id="iconoGraficoActivo">bar_chart</span>
+                <h3 class="font-display font-black text-sm text-primary uppercase tracking-wide" id="tituloGraficoActivo">Visualización Analítica</h3>
+            </div>
+            <div class="flex items-center gap-2 text-xs">
+                <span class="text-[11px] text-on-surface-variant font-medium">Dimensión: <strong id="etiquetaDim" class="text-primary font-bold">{{ dimension_seleccionada }}</strong></span>
+                <span class="text-slate-300">|</span>
+                <span class="text-[11px] text-on-surface-variant font-medium">Métrica: <strong id="etiquetaMet" class="text-secondary font-bold">{{ metrica_seleccionada }}</strong></span>
+            </div>
+        </div>
+
+        <div id="contenedorPlotlyPrincipal" class="w-full h-[420px]"></div>
+    </div>
+
+    <!-- Panel de Profundización Interactiva (Drill-Down) -->
+    <div class="bg-surface-container-low p-5 rounded-2xl border border-outline-variant/60 shadow-xs flex flex-col md:flex-row items-center justify-between gap-4">
+        <div class="flex items-center gap-3 w-full md:w-auto">
+            <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-xl">zoom_in</span>
+            </div>
+            <div>
+                <h5 class="font-display font-bold text-xs text-on-surface">Profundizar en un Segmento (Drill-Down)</h5>
+                <p class="text-[11px] text-on-surface-variant">Filtra y desciende automáticamente al siguiente nivel jerárquico.</p>
+            </div>
+        </div>
+
+        <div class="flex items-center gap-2 w-full md:w-auto">
+            <select id="selValorDrillDown" class="bg-white border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface focus:border-primary focus:outline-none min-w-[200px]">
+                <!-- Opciones dinámicas -->
+            </select>
+            <button type="button" onclick="ejecutarDrillDown()" class="btn-glow text-on-primary font-bold px-4 py-2 rounded-xl text-xs flex items-center gap-1 shrink-0">
+                <span class="material-symbols-outlined text-sm">arrow_downward</span> Profundizar
+            </button>
+        </div>
+    </div>
+
+    <!-- Matriz de Datos Agregados y Exportación Protegida -->
+    <div class="bg-white rounded-2xl border border-outline-variant/60 shadow-xs overflow-hidden">
+        <div class="p-4 border-b border-outline-variant/40 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-lg">table_chart</span>
+                <div>
+                    <h4 class="font-display font-bold text-xs text-on-surface">Matriz de Resumen Agregado</h4>
+                    <span class="text-[10px] text-emerald-700 font-semibold flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">verified_user</span> Grano Máximo Protegido (Sin exposición transaccional atómica)
+                    </span>
+                </div>
+            </div>
+            <div class="flex items-center gap-2">
+                <button type="button" onclick="ejecutarExportacion('excel')" id="btnExportarExcel" class="bg-emerald-600 hover:bg-emerald-700 text-white font-bold px-3 py-1.5 rounded-lg transition-all text-xs flex items-center gap-1.5 shadow-xs cursor-pointer" title="Descarga el cubo en Excel particionado a 700k filas con autofiltro">
+                    <span class="material-symbols-outlined text-xs">table_view</span> Exportar Excel (.xlsx)
+                </button>
+                <button type="button" onclick="ejecutarExportacion('csv')" id="btnExportarCsv" class="bg-surface-container text-on-surface hover:bg-surface-container-high font-bold px-3 py-1.5 rounded-lg transition-all text-xs flex items-center gap-1.5 border border-outline-variant cursor-pointer" title="Descarga el cubo en CSV con UTF-8 BOM">
+                    <span class="material-symbols-outlined text-xs">description</span> Exportar CSV
+                </button>
+            </div>
+        </div>
+        <div class="overflow-x-auto max-h-96" id="contenedorTablaDatos">
+            <table class="w-full text-left border-collapse text-xs" id="tablaAgregada">
+                <!-- Generada por JS -->
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let filtrosDrillDown = [];
+    let codigoVistaActual = "{{ vista_actual.codigoVista }}";
+    let tipoGraficoActivo = "{{ grafico_predeterminado }}";
+    let graficosPermitidos = {{ graficos_permitidos | tojson }};
+    let jerarquiaDrillDown = {{ jerarquia_drilldown | tojson }};
+    let dimensionMacroInicial = "{{ dimension_seleccionada }}";
+    let datosActuales = [];
+
+    const PALETA_COLORES = ["#004482", "#006e20", "#005cab", "#0284c7", "#d97706", "#dc2626", "#475569", "#64748b"];
+
+    function cambiarCubo(codigo) {
+        window.location.href = `/explorador?codigo=${codigo}`;
+    }
+
+    function conmutarTipoGrafico(tipo) {
+        if (!graficosPermitidos.includes(tipo)) return;
+        tipoGraficoActivo = tipo;
+
+        // Actualizar estados visuales de botones
+        document.querySelectorAll('.btn-tipo-grafico').forEach(btn => {
+            btn.classList.remove('bg-white', 'text-primary', 'shadow-xs');
+            btn.classList.add('text-slate-600');
+        });
+
+        const btnActivo = document.getElementById(`btnTipo_${tipo}`);
+        if (btnActivo) {
+            btnActivo.classList.add('bg-white', 'text-primary', 'shadow-xs');
+            btnActivo.classList.remove('text-slate-600');
+        }
+
+        const icono = document.getElementById('iconoGraficoActivo');
+        const tit = document.getElementById('tituloGraficoActivo');
+        const titulos = {
+            'pie': ['pie_chart', 'Distribución Porcentual'],
+            'bar': ['bar_chart', 'Comparativa Cuantitativa'],
+            'line': ['show_chart', 'Tendencia Cronológica'],
+            'area': ['area_chart', 'Volumen Acumulado'],
+            'treemap': ['grid_view', 'Jerarquía Desglosada'],
+            'scatter': ['scatter_plot', 'Dispersión y Correlación']
+        };
+
+        if (titulos[tipo]) {
+            icono.textContent = titulos[tipo][0];
+            tit.textContent = titulos[tipo][1];
+        }
+
+        if (datosActuales && datosActuales.length > 0) {
+            const dim = document.getElementById('selDimension').value;
+            const dimSec = document.getElementById('selDimensionSecundaria') ? document.getElementById('selDimensionSecundaria').value : "";
+            const met = document.getElementById('selMetrica').value;
+            renderizarGraficoPlotly(datosActuales, dim, met, dimSec);
+        }
+    }
+
+    async function cargarDatosOlap() {
+        const dim = document.getElementById('selDimension').value;
+        const dimSec = document.getElementById('selDimensionSecundaria') ? document.getElementById('selDimensionSecundaria').value : "";
+        const met = document.getElementById('selMetrica').value;
+
+        document.getElementById('etiquetaDim').textContent = dimSec ? `${dim} × ${dimSec}` : dim;
+        document.getElementById('etiquetaMet').textContent = met;
+
+        const contenedor = document.getElementById('contenedorPlotlyPrincipal');
+        if (contenedor && (!datosActuales || datosActuales.length === 0)) {
+            Plotly.purge(contenedor);
+            contenedor.innerHTML = '<div class="h-full flex flex-col items-center justify-center text-slate-400 text-xs font-semibold gap-2"><div class="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"></div><span>Cargando agregación analítica...</span></div>';
+        }
+
+        const payload = {
+            codigoVista: codigoVistaActual,
+            dimension: dim,
+            dimensionSecundaria: dimSec || null,
+            metrica: met,
+            filtros: filtrosDrillDown
+        };
+
+        try {
+            const resp = await fetch('/api/olap/consultar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload)
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                datosActuales = data.filas;
+                renderizarGraficoPlotly(datosActuales, dim, met, dimSec);
+                renderizarTablaHtml(datosActuales, dim, met, dimSec);
+                actualizarSelectorDrillDown(datosActuales, dim);
+                actualizarKpis(data.kpis);
+                actualizarMigasPan();
+            } else {
+                console.error("Error OLAP:", data.error);
+                if (contenedor) {
+                    Plotly.purge(contenedor);
+                    contenedor.innerHTML = `<div class="h-full flex flex-col items-center justify-center text-rose-500 text-xs font-semibold gap-1"><span class="material-symbols-outlined text-2xl">error</span>${data.error || 'Error al consultar cubo'}</div>`;
+                }
+            }
+        } catch (e) {
+            console.error("Error cargando datos OLAP:", e);
+            if (contenedor) {
+                Plotly.purge(contenedor);
+                contenedor.innerHTML = '<div class="h-full flex flex-col items-center justify-center text-rose-500 text-xs font-semibold gap-1"><span class="material-symbols-outlined text-2xl">wifi_off</span>Error de conexión al procesar la vista.</div>';
+            }
+        }
+    }
+
+    function renderizarGraficoPlotly(filas, dim, met, dimSec) {
+        const contenedor = document.getElementById('contenedorPlotlyPrincipal');
+        if (!contenedor) return;
+
+        if (!filas || filas.length === 0) {
+            Plotly.purge(contenedor);
+            contenedor.innerHTML = '<div class="h-full flex items-center justify-center text-slate-400 text-xs font-semibold">Sin datos para la selección actual.</div>';
+            return;
+        }
+
+        Plotly.purge(contenedor);
+        contenedor.innerHTML = '';
+
+        const colMet = `${met}_Total` in (filas[0] || {}) ? `${met}_Total` : (`${met}_Promedio` in (filas[0] || {}) ? `${met}_Promedio` : met);
+
+        let traces = [];
+        let layoutBase = {
+            paper_bgcolor: 'rgba(0,0,0,0)',
+            plot_bgcolor: 'rgba(0,0,0,0)',
+            margin: { t: 30, b: 50, l: 50, r: 30 },
+            font: { family: 'Hanken Grotesk, Inter, sans-serif', size: 11, color: '#334155' },
+            autosize: true
+        };
+
+        // MODO MULTIDIMENSIONAL (Dimensión Principal + Dimensión Secundaria / Desglose)
+        if (dimSec && dimSec !== dim && filas.some(r => r[dimSec] !== undefined)) {
+            const categoriasX = [...new Set(filas.map(r => String(r[dim])))];
+            const seriesSec = [...new Set(filas.map(r => String(r[dimSec])))];
+
+            if (tipoGraficoActivo === 'bar') {
+                traces = seriesSec.map((serie, idx) => {
+                    const valoresY = categoriasX.map(cat => {
+                        const encontrado = filas.find(r => String(r[dim]) === cat && String(r[dimSec]) === serie);
+                        return encontrado ? Number(encontrado[colMet] || 0) : 0;
+                    });
+                    return {
+                        x: categoriasX,
+                        y: valoresY,
+                        name: serie,
+                        type: 'bar',
+                        marker: { color: PALETA_COLORES[idx % PALETA_COLORES.length] },
+                        text: valoresY.map(v => v > 0 ? Number(v).toLocaleString() : ''),
+                        textposition: 'outside'
+                    };
+                });
+                layoutBase.barmode = 'group';
+                layoutBase.xaxis = { title: dim, gridcolor: 'rgba(226, 232, 240, 0.6)' };
+                layoutBase.yaxis = { title: met, gridcolor: 'rgba(226, 232, 240, 0.6)' };
+                layoutBase.legend = { orientation: 'h', y: -0.2, x: 0.5, xanchor: 'center' };
+
+            } else if (tipoGraficoActivo === 'line') {
+                traces = seriesSec.map((serie, idx) => {
+                    const valoresY = categoriasX.map(cat => {
+                        const encontrado = filas.find(r => String(r[dim]) === cat && String(r[dimSec]) === serie);
+                        return encontrado ? Number(encontrado[colMet] || 0) : null;
+                    });
+                    return {
+                        x: categoriasX,
+                        y: valoresY,
+                        name: serie,
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        line: { color: PALETA_COLORES[idx % PALETA_COLORES.length], width: 3 },
+                        marker: { size: 7 }
+                    };
+                });
+                layoutBase.xaxis = { title: dim, gridcolor: 'rgba(226, 232, 240, 0.6)' };
+                layoutBase.yaxis = { title: met, gridcolor: 'rgba(226, 232, 240, 0.6)' };
+                layoutBase.legend = { orientation: 'h', y: -0.2, x: 0.5, xanchor: 'center' };
+
+            } else if (tipoGraficoActivo === 'pie') {
+                const labels = filas.map(r => `${r[dim]} - ${r[dimSec]}`);
+                const vals = filas.map(r => Number(r[colMet] || 0));
+                const elementosValidos = [];
+                for (let i = 0; i < labels.length; i++) {
+                    if (vals[i] > 0) elementosValidos.push({ label: labels[i], valor: vals[i] });
+                }
+                traces = [{
+                    labels: elementosValidos.map(d => d.label),
+                    values: elementosValidos.map(d => d.valor),
+                    type: 'pie',
+                    hole: 0.45,
+                    marker: { colors: PALETA_COLORES, line: { color: '#ffffff', width: 2 } },
+                    textinfo: 'label+percent',
+                    textposition: 'inside',
+                    hoverinfo: 'label+value+percent'
+                }];
+                layoutBase.margin = { t: 20, b: 60, l: 20, r: 20 };
+                layoutBase.legend = { orientation: 'h', y: -0.15, x: 0.5, xanchor: 'center' };
+
+            } else {
+                // Treemap / default para multidimensional
+                const labels = [];
+                const parents = [];
+                const values = [];
+
+                categoriasX.forEach(cat => {
+                    labels.push(cat);
+                    parents.push("");
+                    const suma = filas.filter(r => String(r[dim]) === cat).reduce((acc, r) => acc + Number(r[colMet] || 0), 0);
+                    values.push(suma);
+                });
+
+                filas.forEach(r => {
+                    const tag = `${r[dimSec]} (${r[dim]})`;
+                    labels.push(tag);
+                    parents.push(String(r[dim]));
+                    values.push(Number(r[colMet] || 0));
+                });
+
+                traces = [{
+                    type: 'treemap',
+                    labels: labels,
+                    parents: parents,
+                    values: values,
+                    textinfo: "label+value+percent parent",
+                    marker: { colors: PALETA_COLORES }
+                }];
+            }
+
+            Plotly.newPlot('contenedorPlotlyPrincipal', traces, layoutBase, { responsive: true, displayModeBar: false }).then(function(graphDiv) {
+                adjuntarEventoPlotlyClick(graphDiv, dim, dimSec);
+            });
+            return;
+        }
+
+        // MODO UNIDIMENSIONAL ESTÁNDAR
+        const etiquetas = filas.map(r => r[dim]);
+        const valores = filas.map(r => Number(r[colMet] || 0));
+
+        if (tipoGraficoActivo === 'pie') {
+            const elementosValidos = [];
+            for (let i = 0; i < etiquetas.length; i++) {
+                if (valores[i] > 0) {
+                    elementosValidos.push({ label: etiquetas[i], valor: valores[i] });
+                }
+            }
+
+            if (elementosValidos.length === 0) {
+                contenedor.innerHTML = '<div class="h-full flex flex-col items-center justify-center text-slate-400 text-xs font-semibold gap-2"><span class="material-symbols-outlined text-3xl text-amber-500">warning</span>No existen valores positivos para representar en gráfico circular.<br><span class="text-[10px] text-slate-400">Seleccione un gráfico de barras para visualizar saldos o variaciones.</span></div>';
+                return;
+            }
+
+            traces = [{
+                labels: elementosValidos.map(d => d.label),
+                values: elementosValidos.map(d => d.valor),
+                type: 'pie',
+                hole: 0.45,
+                marker: { colors: PALETA_COLORES, line: { color: '#ffffff', width: 2 } },
+                textinfo: 'label+percent',
+                textposition: 'inside',
+                hoverinfo: 'label+value+percent'
+            }];
+            layoutBase.margin = { t: 20, b: 60, l: 20, r: 20 };
+            layoutBase.legend = { orientation: 'h', y: -0.15, x: 0.5, xanchor: 'center' };
+
+        } else if (tipoGraficoActivo === 'line') {
+            traces = [{
+                x: etiquetas,
+                y: valores,
+                type: 'scatter',
+                mode: 'lines+markers',
+                line: { color: '#004482', width: 3 },
+                marker: { color: '#006e20', size: 8 }
+            }];
+            layoutBase.xaxis = { title: dim, gridcolor: 'rgba(226, 232, 240, 0.6)' };
+            layoutBase.yaxis = { title: met, gridcolor: 'rgba(226, 232, 240, 0.6)' };
+
+        } else if (tipoGraficoActivo === 'area') {
+            traces = [{
+                x: etiquetas,
+                y: valores,
+                type: 'scatter',
+                mode: 'lines',
+                fill: 'tozeroy',
+                fillcolor: 'rgba(0, 68, 130, 0.2)',
+                line: { color: '#004482', width: 2.5 }
+            }];
+            layoutBase.xaxis = { title: dim, gridcolor: 'rgba(226, 232, 240, 0.6)' };
+            layoutBase.yaxis = { title: met, gridcolor: 'rgba(226, 232, 240, 0.6)' };
+
+        } else if (tipoGraficoActivo === 'treemap') {
+            traces = [{
+                type: 'treemap',
+                labels: etiquetas,
+                parents: etiquetas.map(() => ""),
+                values: valores,
+                textinfo: "label+value+percent root",
+                marker: { colors: PALETA_COLORES }
+            }];
+
+        } else {
+            // Default: 'bar'
+            traces = [{
+                x: etiquetas,
+                y: valores,
+                type: 'bar',
+                marker: { color: '#004482', line: { color: '#005cab', width: 1 } },
+                text: valores.map(v => Number(v).toLocaleString()),
+                textposition: 'outside'
+            }];
+            layoutBase.xaxis = { title: dim, gridcolor: 'rgba(226, 232, 240, 0.6)' };
+            layoutBase.yaxis = { title: met, gridcolor: 'rgba(226, 232, 240, 0.6)' };
+        }
+
+        Plotly.newPlot('contenedorPlotlyPrincipal', traces, layoutBase, { responsive: true, displayModeBar: false }).then(function(graphDiv) {
+            adjuntarEventoPlotlyClick(graphDiv, dim, dimSec);
+        });
+    }
+
+    function adjuntarEventoPlotlyClick(contenedor, dim, dimSec) {
+        if (!contenedor || typeof contenedor.on !== 'function') return;
+
+        try {
+            if (typeof contenedor.removeAllListeners === 'function') {
+                contenedor.removeAllListeners('plotly_click');
+            }
+        } catch (e) {
+            // Ignorar excepciones al desasociar
+        }
+
+        contenedor.on('plotly_click', function(data) {
+            if (!data || !data.points || data.points.length === 0) return;
+            const pt = data.points[0];
+
+            let valor = null;
+            if (pt.x !== undefined && pt.x !== null) {
+                valor = pt.x;
+            } else if (pt.label !== undefined && pt.label !== null) {
+                valor = pt.label;
+            } else if (pt.customdata !== undefined && pt.customdata !== null) {
+                valor = pt.customdata;
+            }
+
+            if (valor === null || valor === undefined) return;
+
+            let valStr = String(valor).trim();
+            // Normalizar si es compuesto multidimensional
+            if (dimSec && valStr.includes(' - ')) {
+                valStr = valStr.split(' - ')[0].trim();
+            } else if (dimSec && valStr.includes(' (') && valStr.endsWith(')')) {
+                const match = valStr.match(/\((.*?)\)$/);
+                if (match && match[1]) {
+                    valStr = match[1].trim();
+                }
+            }
+
+            if (valStr !== '') {
+                const sel = document.getElementById('selValorDrillDown');
+                if (sel) {
+                    sel.value = valStr;
+                }
+                ejecutarDrillDownPorValor(valStr);
+            }
+        });
+    }
+
+    function renderizarTablaHtml(filas, dim, met, dimSec) {
+        if (!filas || filas.length === 0) {
+            document.getElementById('tablaAgregada').innerHTML = '<tbody><tr><td class="p-4 text-center text-slate-400">Sin datos disponibles</td></tr></tbody>';
+            return;
+        }
+
+        const colMet = `${met}_Total` in (filas[0] || {}) ? `${met}_Total` : (`${met}_Promedio` in (filas[0] || {}) ? `${met}_Promedio` : met);
+        const tieneSec = dimSec && dimSec !== dim && filas.some(r => r[dimSec] !== undefined);
+
+        let html = `
+            <thead>
+                <tr class="bg-surface-container-low text-on-surface-variant font-bold border-b border-outline-variant/40">
+                    <th class="py-2.5 px-4">${dim}</th>
+                    ${tieneSec ? `<th class="py-2.5 px-4">${dimSec}</th>` : ''}
+                    <th class="py-2.5 px-4 text-right">${met}</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-outline-variant/30 text-on-surface">
+        `;
+        filas.forEach(f => {
+            const val = Number(f[colMet] || 0).toLocaleString();
+            html += `
+                <tr class="hover:bg-surface-container-low/50 transition-colors">
+                    <td class="py-2 px-4 font-bold text-primary">${f[dim]}</td>
+                    ${tieneSec ? `<td class="py-2 px-4 font-semibold text-slate-600">${f[dimSec]}</td>` : ''}
+                    <td class="py-2 px-4 text-right font-mono font-bold">${val}</td>
+                </tr>
+            `;
+        });
+        html += '</tbody>';
+        document.getElementById('tablaAgregada').innerHTML = html;
+    }
+
+    function actualizarSelectorDrillDown(filas, dim) {
+        const sel = document.getElementById('selValorDrillDown');
+        sel.innerHTML = '';
+        const unicos = [...new Set(filas.map(f => f[dim]))].filter(v => v !== null && v !== undefined && v !== '');
+        unicos.forEach(v => {
+            const opt = document.createElement('option');
+            opt.value = v;
+            opt.textContent = `${dim}: ${v}`;
+            sel.appendChild(opt);
+        });
+    }
+
+    function ejecutarDrillDownPorValor(val) {
+        if (!val) return;
+        const dim = document.getElementById('selDimension').value;
+
+        // Evitar filtros duplicados para la misma dimensión activa
+        filtrosDrillDown = filtrosDrillDown.filter(f => f.dimension !== dim);
+        filtrosDrillDown.push({ dimension: dim, valor: String(val) });
+
+        // Determinar siguiente nivel en la jerarquía de drill-down
+        const idxActual = jerarquiaDrillDown.indexOf(dim);
+        let siguienteDim = null;
+        if (idxActual >= 0 && idxActual + 1 < jerarquiaDrillDown.length) {
+            siguienteDim = jerarquiaDrillDown[idxActual + 1];
+        } else {
+            const dimsVisibles = Array.from(document.getElementById('selDimension').options).map(o => o.value);
+            siguienteDim = dimsVisibles.find(d => d !== dim && !filtrosDrillDown.some(f => f.dimension === d));
+        }
+
+        if (siguienteDim) {
+            document.getElementById('selDimension').value = siguienteDim;
+        }
+
+        // Resetear desglose secundario en drilldown para enfocarse en la dimensión destino
+        if (document.getElementById('selDimensionSecundaria')) {
+            document.getElementById('selDimensionSecundaria').value = "";
+        }
+
+        cargarDatosOlap();
+    }
+
+    function ejecutarDrillDown() {
+        const val = document.getElementById('selValorDrillDown').value;
+        if (!val) return;
+        ejecutarDrillDownPorValor(val);
+    }
+
+    function restablecerMacro() {
+        filtrosDrillDown = [];
+        document.getElementById('selDimension').value = dimensionMacroInicial;
+        if (document.getElementById('selDimensionSecundaria')) {
+            document.getElementById('selDimensionSecundaria').value = "";
+        }
+        cargarDatosOlap();
+    }
+
+    function actualizarMigasPan() {
+        const el = document.getElementById('textoMigaActual');
+        const btn = document.getElementById('btnRestablecer');
+        if (filtrosDrillDown.length === 0) {
+            el.textContent = "Inicio (Macro)";
+            btn.classList.add('hidden');
+            btn.classList.remove('inline-flex');
+        } else {
+            el.innerHTML = "Inicio &gt; " + filtrosDrillDown.map(f => `<span class="bg-primary/10 text-primary px-1.5 py-0.5 rounded font-mono">${f.dimension}: <strong>${f.valor}</strong></span>`).join(" &gt; ");
+            btn.classList.remove('hidden');
+            btn.classList.add('inline-flex');
+        }
+    }
+
+    function actualizarKpis(kpis) {
+        if (!kpis) return;
+        if (kpis.totalFilas !== undefined) document.getElementById('kpiTotalFilas').textContent = Number(kpis.totalFilas).toLocaleString();
+        if (kpis.suma !== undefined) document.getElementById('kpiSumaTotal').textContent = '$' + Number(kpis.suma).toLocaleString();
+        if (kpis.promedio !== undefined) document.getElementById('kpiPromedio').textContent = Number(kpis.promedio).toLocaleString();
+    }
+
+    function actualizarGraficos() {
+        cargarDatosOlap();
+    }
+
+    async function ejecutarExportacion(formato) {
+        const btnExcel = document.getElementById('btnExportarExcel');
+        const btnCsv = document.getElementById('btnExportarCsv');
+        const btnActivo = formato === 'excel' ? btnExcel : btnCsv;
+        const textoOriginal = btnActivo ? btnActivo.innerHTML : '';
+
+        try {
+            if (btnActivo) {
+                btnActivo.disabled = true;
+                btnActivo.innerHTML = `<span class="material-symbols-outlined text-xs animate-spin">sync</span> Verificando...`;
+            }
+
+            // Pre-verificación de volumen y límite de 3M
+            const resp = await fetch(`/api/olap/exportar/pre-verificar?codigoVista=${encodeURIComponent(codigoVistaActual)}`);
+            const diag = await resp.json();
+
+            if (!resp.ok || !diag.exito) {
+                mostrarModalAlerta({
+                    titulo: 'Error de Verificación',
+                    mensaje: diag.error || 'Error al verificar la exportación de la vista.',
+                    tipo: 'error'
+                });
+                if (btnActivo) {
+                    btnActivo.disabled = false;
+                    btnActivo.innerHTML = textoOriginal;
+                }
+                return;
+            }
+
+            if (!diag.permiteDescarga) {
+                mostrarModalAlerta({
+                    titulo: 'Límite de Exportación Excedido',
+                    mensaje: `El reporte consolidado de la vista contiene ${Number(diag.totalFilas).toLocaleString()} filas, ` +
+                             `superando el límite máximo permitido de ${Number(diag.limiteMaximo).toLocaleString()} filas.\n\n` +
+                             `Por favor añade filtros a la vista en el Configurador de Vistas para delimitar el reporte.`,
+                    tipo: 'advertencia'
+                });
+                if (btnActivo) {
+                    btnActivo.disabled = false;
+                    btnActivo.innerHTML = textoOriginal;
+                }
+                return;
+            }
+
+            if (btnActivo) {
+                btnActivo.innerHTML = `<span class="material-symbols-outlined text-xs animate-spin">sync</span> Generando ${formato.toUpperCase()} (${Number(diag.totalFilas).toLocaleString()} filas)...`;
+            }
+
+            // Lanzar descarga directa
+            window.location.href = `/api/olap/exportar?codigoVista=${encodeURIComponent(codigoVistaActual)}&formato=${formato}`;
+
+            setTimeout(() => {
+                if (btnActivo) {
+                    btnActivo.disabled = false;
+                    btnActivo.innerHTML = textoOriginal;
+                }
+            }, 4000);
+
+        } catch (e) {
+            mostrarModalAlerta({
+                titulo: 'Error al Exportar',
+                mensaje: 'Error de comunicación con el servidor al exportar: ' + e.message,
+                tipo: 'error'
+            });
+            if (btnActivo) {
+                btnActivo.disabled = false;
+                btnActivo.innerHTML = textoOriginal;
+            }
+        }
+    }
+
+    function exportarCsvBlindado() {
+        ejecutarExportacion('csv');
+    }
+
+    // Inicializar al cargar
+    document.addEventListener("DOMContentLoaded", () => {
+        if (!graficosPermitidos.includes(tipoGraficoActivo)) {
+            tipoGraficoActivo = graficosPermitidos[0] || 'bar';
+        }
+        conmutarTipoGrafico(tipoGraficoActivo);
+        cargarDatosOlap();
+    });
+</script>
+{% endblock %}

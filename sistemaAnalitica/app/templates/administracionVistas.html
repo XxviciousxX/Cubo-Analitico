@@ -1,0 +1,381 @@
+{% extends "base.html" %}
+
+{% block title %}Administración de Vistas | Sistema Analítico{% endblock %}
+{% block page_title %}Administración de Vistas{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Encabezado y Acciones -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="font-display text-2xl font-black text-primary tracking-tight">Gobernanza y Auditoría de Vistas</h2>
+            <p class="text-xs text-on-surface-variant font-medium mt-1">
+                Audita la autoría, trazabilidad de creación y activación granular de modelos y reportes de autoservicio.
+            </p>
+        </div>
+        <div class="flex items-center gap-3">
+            <button type="button" onclick="abrirModalCrearVista()" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white btn-glow cursor-pointer">
+                <span class="material-symbols-outlined text-base">add_circle</span>
+                + Nueva Vista Analítica
+            </button>
+            <a href="/configuracion-vistas" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-all">
+                <span class="material-symbols-outlined text-base">settings_suggest</span>
+                Diseñador de Reglas Visuales
+            </a>
+        </div>
+    </div>
+
+    <!-- Tarjetas de Métricas -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-card rounded-2xl p-5 financial-card">
+            <div class="flex items-center justify-between">
+                <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Total de Vistas</p>
+                <span class="material-symbols-outlined text-primary text-xl">visibility</span>
+            </div>
+            <p class="text-2xl font-black font-display text-primary mt-2">{{ vistas|length }}</p>
+            <p class="text-[11px] text-outline mt-1 font-medium">Modelos analíticos configurados</p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 financial-card">
+            <div class="flex items-center justify-between">
+                <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Vistas Habilitadas</p>
+                <span class="material-symbols-outlined text-secondary text-xl">check_circle</span>
+            </div>
+            {% set habilitadas = vistas|selectattr("estadoHabilitado")|list|length %}
+            <p class="text-2xl font-black font-display text-secondary mt-2">{{ habilitadas }}</p>
+            <p class="text-[11px] text-outline mt-1 font-medium">Publicadas en el Explorador</p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 financial-card">
+            <div class="flex items-center justify-between">
+                <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Vistas Deshabilitadas</p>
+                <span class="material-symbols-outlined text-error text-xl">cancel</span>
+            </div>
+            <p class="text-2xl font-black font-display text-error mt-2">{{ (vistas|length) - habilitadas }}</p>
+            <p class="text-[11px] text-outline mt-1 font-medium">Ocultas para usuarios analistas</p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 financial-card">
+            <div class="flex items-center justify-between">
+                <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Operativas al 100%</p>
+                <span class="material-symbols-outlined text-primary-container text-xl">verified</span>
+            </div>
+            {% set operativas = vistas|selectattr("puedeExplorar")|list|length %}
+            <p class="text-2xl font-black font-display text-primary-container mt-2">{{ operativas }}</p>
+            <p class="text-[11px] text-outline mt-1 font-medium">Vista y cubo subyacente activos</p>
+        </div>
+    </div>
+
+    <!-- Tabla de Catálogo de Vistas -->
+    <div class="glass-card rounded-2xl overflow-hidden shadow-sm">
+        <div class="px-6 py-4 border-b border-outline-variant/40 flex items-center justify-between bg-white/50">
+            <h3 class="font-display text-sm font-bold text-primary flex items-center gap-2">
+                <span class="material-symbols-outlined text-base">view_list</span>
+                Catálogo Institucional de Vistas Analíticas
+            </h3>
+            <span class="text-xs text-on-surface-variant font-medium">Auditoría y control de acceso</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-surface-container-low/70 text-on-surface-variant font-bold uppercase tracking-wider border-b border-outline-variant/40">
+                    <tr>
+                        <th class="py-3.5 px-6">Título de la Vista</th>
+                        <th class="py-3.5 px-4">Cubo Subyacente</th>
+                        <th class="py-3.5 px-4">Autor / Creado Por</th>
+                        <th class="py-3.5 px-4">Fecha Creación</th>
+                        <th class="py-3.5 px-4">Última Carga Cubo</th>
+                        <th class="py-3.5 px-4 text-center">Estado Vista</th>
+                        <th class="py-3.5 px-6 text-right">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-outline-variant/30">
+                    {% for v in vistas %}
+                    <tr class="hover:bg-white/60 transition-colors" id="fila-vista-{{ v.idVista }}">
+                        <td class="py-4 px-6">
+                            <div class="flex items-center gap-3">
+                                <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                                    <span class="material-symbols-outlined text-base">analytics</span>
+                                </div>
+                                <div>
+                                    <p class="font-bold text-on-surface text-sm">{{ v.nombreVista }}</p>
+                                    <p class="text-[11px] text-outline font-mono">{{ v.codigoVista }}</p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-4 px-4">
+                            <div class="flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-sm {% if v.estadoCubo %}text-secondary{% else %}text-error{% endif %}">
+                                    {% if v.estadoCubo %}check_circle{% else %}error{% endif %}
+                                </span>
+                                <div>
+                                    <span class="font-bold text-on-surface">{{ v.nombreCubo }}</span>
+                                    <span class="block text-[10px] {% if v.estadoCubo %}text-secondary{% else %}text-error{% endif %} font-bold">
+                                        {{ 'Cubo Activo' if v.estadoCubo else 'Cubo Inactivo' }}
+                                    </span>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-4 px-4">
+                            <div class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-surface-container text-on-surface font-bold text-[11px]">
+                                <span class="material-symbols-outlined text-xs text-primary">person</span>
+                                {{ v.creadoPor }}
+                            </div>
+                        </td>
+                        <td class="py-4 px-4 font-mono text-xs text-on-surface-variant">
+                            {{ v.fechaCreacion }}
+                        </td>
+                        <td class="py-4 px-4 font-mono text-xs text-on-surface-variant">
+                            {{ v.fechaUltimaCargaCubo }}
+                        </td>
+                        <td class="py-4 px-4 text-center">
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" class="sr-only peer" id="toggle-vista-{{ v.idVista }}" {% if v.estadoHabilitado %}checked{% endif %} onchange="conmutarEstadoVista({{ v.idVista }}, this.checked)">
+                                <div class="w-10 h-5 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-secondary"></div>
+                            </label>
+                            <span class="block text-[10px] font-bold text-outline mt-0.5" id="label-vista-{{ v.idVista }}">
+                                {{ 'Activa' if v.estadoHabilitado else 'Inactiva' }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                {% if v.puedeExplorar %}
+                                <a href="/explorador?codigo={{ v.codigoVista }}" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-white btn-glow" title="Abrir en el Explorador OLAP">
+                                    <span class="material-symbols-outlined text-sm">open_in_new</span>
+                                    Explorar
+                                </a>
+                                {% else %}
+                                <button type="button" disabled class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-outline bg-surface-container cursor-not-allowed opacity-60" title="No disponible: la vista o su cubo están inactivos">
+                                    <span class="material-symbols-outlined text-sm">lock</span>
+                                    Bloqueado
+                                </button>
+                                {% endif %}
+                                <a href="/configuracion-vistas?vista={{ v.codigoVista }}" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors" title="Editar reglas de visualización y grano">
+                                    <span class="material-symbols-outlined text-sm">tune</span>
+                                </a>
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="7" class="py-12 text-center text-outline">
+                            <span class="material-symbols-outlined text-4xl text-outline mb-2">visibility_off</span>
+                            <p class="text-sm font-bold">No hay vistas configuradas.</p>
+                            <p class="text-xs text-outline mt-1">Registra vistas a partir de tus cubos en Ingesta o Configuración de Vistas.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Modal: Crear Nueva Vista Analítica -->
+<div id="modalCrearVista" class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-xs hidden p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full shadow-2xl border border-outline-variant/60 overflow-hidden animate-in fade-in zoom-in duration-200">
+        <div class="px-6 py-4 border-b border-outline-variant/40 flex items-center justify-between bg-surface-container-low/50">
+            <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs">
+                    <span class="material-symbols-outlined text-base">add_circle</span>
+                </div>
+                <div>
+                    <h3 class="font-display text-sm font-bold text-primary">Crear Nueva Vista Analítica</h3>
+                    <p class="text-[11px] text-on-surface-variant">Vincula un Cubo del Data Lake para exploración y reporte de autoservicio.</p>
+                </div>
+            </div>
+            <button type="button" onclick="cerrarModalCrearVista()" class="text-on-surface-variant hover:text-on-surface p-1 rounded-lg">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <form onsubmit="ejecutarCreacionVista(event)" class="p-6 space-y-4 text-xs">
+            <div>
+                <label class="block font-bold text-on-surface mb-1">Nombre de la Vista <span class="text-red-500">*</span></label>
+                <input type="text" id="nuevoNombreVista" required placeholder="ej. Resumen General de Ventas 2026" oninput="autoGenerarSlugVista(this.value)" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface focus:outline-none focus:border-primary">
+            </div>
+
+            <div>
+                <label class="block font-bold text-on-surface mb-1">Código / Identificador Semántico <span class="text-red-500">*</span></label>
+                <input type="text" id="nuevoCodigoVista" required placeholder="ej. vista_resumen_general_ventas" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-mono font-bold text-primary focus:outline-none focus:border-primary">
+                <p class="text-[10px] text-outline mt-0.5">Identificador único utilizado en URLs y gobernanza.</p>
+            </div>
+
+            <div>
+                <label class="block font-bold text-on-surface mb-1">Cubo Subyacente (Data Lake) <span class="text-red-500">*</span></label>
+                <select id="nuevoIdCubo" required class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface focus:outline-none focus:border-primary">
+                    <option value="">-- Selecciona el Cubo que alimentará esta Vista --</option>
+                    {% for c in cubos %}
+                    <option value="{{ c.idCubo }}">{{ c.nombreCubo }} [{{ c.tipoOrigen }}]</option>
+                    {% endfor %}
+                </select>
+                <p class="text-[10px] text-outline mt-0.5">Las columnas y tipos del cubo serán heredados automáticamente.</p>
+            </div>
+
+            <div>
+                <label class="block font-bold text-on-surface mb-1">Descripción / Propósito</label>
+                <textarea id="nuevaDescripcionVista" rows="2" placeholder="Breve resumen del objetivo de esta vista analítica..." class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs text-on-surface focus:outline-none focus:border-primary"></textarea>
+            </div>
+
+            <div>
+                <div class="flex items-center justify-between mb-1.5">
+                    <label class="font-bold text-on-surface">Roles con Acceso a la Vista</label>
+                    <label class="inline-flex items-center gap-1 text-[11px] text-primary cursor-pointer font-bold">
+                        <input type="checkbox" id="chkTodosLosRoles" checked onchange="conmutarSeleccionTodosRoles(this.checked)" class="rounded text-primary focus:ring-0">
+                        <span>Todos los Roles</span>
+                    </label>
+                </div>
+                <div class="p-3 bg-surface-container-low rounded-xl border border-outline-variant/50 max-h-32 overflow-y-auto grid grid-cols-2 gap-2">
+                    {% for r in roles %}
+                    <label class="inline-flex items-center gap-2 text-[11px] text-on-surface cursor-pointer">
+                        <input type="checkbox" name="chkRolVista" value="{{ r.idRol }}" checked class="chk-rol-item rounded text-primary focus:ring-0">
+                        <span>{{ r.nombreRol }}</span>
+                    </label>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div id="alertaModalCrearVista" class="hidden p-3 rounded-xl text-xs font-medium"></div>
+
+            <div class="flex items-center justify-end gap-2.5 pt-3 border-t border-outline-variant/40">
+                <button type="button" onclick="cerrarModalCrearVista()" class="px-4 py-2 rounded-xl text-xs font-bold text-on-surface-variant hover:bg-surface-container transition-all">
+                    Cancelar
+                </button>
+                <button type="submit" id="btnConfirmarCrearVista" class="px-5 py-2 rounded-xl text-xs font-bold text-white btn-glow flex items-center gap-1.5 shadow-sm cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">save</span>
+                    Crear y Diseñar Reglas Visuales
+                </button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    function abrirModalCrearVista(idCuboPreseleccionado = null) {
+        document.getElementById('modalCrearVista').classList.remove('hidden');
+        if (idCuboPreseleccionado) {
+            const sel = document.getElementById('nuevoIdCubo');
+            if (sel) {
+                sel.value = idCuboPreseleccionado;
+                const opt = sel.selectedOptions[0];
+                if (opt && !document.getElementById('nuevoNombreVista').value) {
+                    const cleanNom = opt.textContent.split(' [')[0].trim();
+                    document.getElementById('nuevoNombreVista').value = `Vista ${cleanNom}`;
+                    autoGenerarSlugVista(`Vista ${cleanNom}`);
+                }
+            }
+        }
+    }
+
+    function cerrarModalCrearVista() {
+        document.getElementById('modalCrearVista').classList.add('hidden');
+    }
+
+    function autoGenerarSlugVista(nombre) {
+        const slug = (nombre || '')
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "_")
+            .replace(/^_+|_+$/g, "")
+            .slice(0, 50);
+        document.getElementById('nuevoCodigoVista').value = slug ? `vista_${slug}` : '';
+    }
+
+    function conmutarSeleccionTodosRoles(marcar) {
+        document.querySelectorAll('.chk-rol-item').forEach(cb => cb.checked = marcar);
+    }
+
+    async function ejecutarCreacionVista(ev) {
+        ev.preventDefault();
+        const nombre = document.getElementById('nuevoNombreVista').value.trim();
+        const codigo = document.getElementById('nuevoCodigoVista').value.trim();
+        const idCubo = parseInt(document.getElementById('nuevoIdCubo').value);
+        const desc = document.getElementById('nuevaDescripcionVista').value.trim();
+        const alerta = document.getElementById('alertaModalCrearVista');
+        const btn = document.getElementById('btnConfirmarCrearVista');
+
+        if (!idCubo) {
+            mostrarModalAlerta({
+                titulo: 'Cubo Requerido',
+                mensaje: 'Debes seleccionar un Cubo subyacente para la vista.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const rolesSeleccionados = Array.from(document.querySelectorAll('.chk-rol-item:checked')).map(cb => parseInt(cb.value));
+
+        btn.disabled = true;
+        btn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">sync</span> Creando vista...`;
+
+        try {
+            const resp = await fetch('/api/vistas/crear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nombreVista: nombre,
+                    codigoVista: codigo,
+                    idCubo: idCubo,
+                    descripcion: desc,
+                    roles: rolesSeleccionados
+                })
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                // Redirigir directamente al configurador de vistas para configurar filtros y reglas visuales
+                window.location.href = `/configuracion-vistas?idVista=${data.idVista}`;
+            } else {
+                alerta.className = "p-3 rounded-xl bg-red-50 text-red-700 border border-red-200 text-xs";
+                alerta.textContent = data.error || "Fallo al crear la vista.";
+                alerta.classList.remove('hidden');
+                btn.disabled = false;
+                btn.innerHTML = `<span class="material-symbols-outlined text-sm">save</span> Crear y Diseñar Reglas Visuales`;
+            }
+        } catch(e) {
+            alerta.className = "p-3 rounded-xl bg-red-50 text-red-700 border border-red-200 text-xs";
+            alerta.textContent = "Error de comunicación: " + e.message;
+            alerta.classList.remove('hidden');
+            btn.disabled = false;
+            btn.innerHTML = `<span class="material-symbols-outlined text-sm">save</span> Crear y Diseñar Reglas Visuales`;
+        }
+    }
+
+    async function conmutarEstadoVista(idVista, nuevoEstado) {
+        const label = document.getElementById(`label-vista-${idVista}`);
+        try {
+            const resp = await fetch(`/api/vistas/${idVista}/estado`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estadoHabilitado: nuevoEstado })
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                label.textContent = nuevoEstado ? 'Activa' : 'Inactiva';
+                setTimeout(() => { window.location.reload(); }, 600);
+            } else {
+                mostrarModalAlerta({
+                    titulo: 'Error de Actualización',
+                    mensaje: `Error al actualizar estado: ${data.error}`,
+                    tipo: 'error'
+                });
+                document.getElementById(`toggle-vista-${idVista}`).checked = !nuevoEstado;
+            }
+        } catch (e) {
+            mostrarModalAlerta({
+                titulo: 'Error de Conexión',
+                mensaje: 'Fallo de conexión al actualizar estado de la vista.',
+                tipo: 'error'
+            });
+            document.getElementById(`toggle-vista-${idVista}`).checked = !nuevoEstado;
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const urlParams = new URLSearchParams(window.location.search);
+        if (urlParams.has('nuevoConCubo')) {
+            abrirModalCrearVista(urlParams.get('nuevoConCubo'));
+        }
+    });
+</script>
+{% endblock %}

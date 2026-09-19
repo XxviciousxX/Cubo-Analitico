@@ -1,0 +1,23 @@
+# ==============================================================================
+# .dockerignore - Exclusiones para construccion de imagen Docker
+# ==============================================================================
+.git
+.gitignore
+.env
+.venv
+venv/
+env/
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.coverage
+.agents
+.vscode
+.idea
+*.log
+sistemaAnalitica/almacenamiento/parquets/*.parquet
+sistemaAnalitica/almacenamiento/parquets_backup
+sistemaAnalitica/almacenamiento/*.db
+datosPrueba/*.xlsx

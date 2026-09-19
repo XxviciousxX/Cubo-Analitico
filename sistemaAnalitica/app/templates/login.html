@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>Cubix | Acceso al Sistema</title>
+    <link rel="icon" type="image/jpeg" href="/static/img/logo.jpg">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hanken+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+
+    <!-- Tailwind CSS con tokens corporativos -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#004482",
+                        "primary-container": "#005cab",
+                        "on-primary": "#ffffff",
+                        "secondary": "#006e20",
+                        "background": "#f9f9fc",
+                        "surface": "#ffffff",
+                        "surface-container-low": "#f3f3f6",
+                        "surface-container": "#eeeef0",
+                        "on-surface": "#1a1c1e",
+                        "on-surface-variant": "#414751",
+                        "outline": "#727783",
+                        "outline-variant": "#c1c6d3",
+                        "error": "#ba1a1a",
+                        "error-container": "#ffdad6",
+                        "on-error-container": "#93000a"
+                    },
+                    fontFamily: {
+                        body: ["Inter", "sans-serif"],
+                        display: ["Hanken Grotesk", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.88);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 10px 35px 0 rgba(0, 68, 130, 0.10);
+        }
+        .mesh-gradient {
+            background-color: #f9f9fc;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(0, 68, 130, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(0, 110, 32, 0.10) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(0, 68, 130, 0.08) 0px, transparent 50%),
+                radial-gradient(at 0% 100%, rgba(0, 110, 32, 0.06) 0px, transparent 50%);
+        }
+        .btn-glow {
+            background: linear-gradient(135deg, #004482 0%, #005cab 100%);
+            box-shadow: 0 4px 15px rgba(0, 68, 130, 0.25);
+            transition: all 0.25s ease;
+        }
+        .btn-glow:hover {
+            box-shadow: 0 6px 20px rgba(0, 68, 130, 0.35);
+            transform: translateY(-1px);
+        }
+        .btn-glow:active {
+            transform: scale(0.98);
+        }
+    </style>
+</head>
+<body class="mesh-gradient font-body text-on-surface min-h-screen flex flex-col items-center justify-center p-4">
+
+    <div class="w-full max-w-[460px]">
+        <div class="glass-card rounded-2xl overflow-hidden p-6 md:p-8">
+            <!-- Encabezado Institucional -->
+            <div class="flex flex-col items-center mb-6 text-center">
+                <img src="/static/img/logo.jpg?v=3" alt="Cubix" class="w-24 h-24 object-contain rounded-2xl shadow-md mb-3 bg-white p-2 border border-outline-variant/50 hover:scale-105 transition-transform duration-300">
+                <h1 class="font-display text-2xl md:text-3xl text-primary font-black tracking-tight">Cubix</h1>
+                <p class="text-xs text-on-surface-variant mt-1">Inteligencia Analítica y Cubos OLAP</p>
+            </div>
+
+            <!-- Alerta de Error si existe -->
+            {% if error %}
+            <div class="mb-4 p-3 rounded-xl bg-error-container text-on-error-container text-xs flex items-center gap-2 border border-error/20">
+                <span class="material-symbols-outlined text-sm shrink-0">error</span>
+                <span>{{ error }}</span>
+            </div>
+            {% endif %}
+
+            <!-- Aviso Informativo / Inactividad -->
+            {% if aviso %}
+            <div class="mb-4 p-3.5 rounded-xl bg-amber-50 text-amber-900 text-xs flex items-center gap-2.5 border border-amber-200 shadow-sm">
+                <span class="material-symbols-outlined text-amber-600 text-base shrink-0">timer_off</span>
+                <span class="font-medium leading-relaxed">{{ aviso }}</span>
+            </div>
+            {% endif %}
+
+            <!-- Formulario de Acceso -->
+            <form method="POST" action="/login" class="space-y-4">
+                <input type="hidden" name="estrategia" value="LOCAL">
+
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1" for="usuario">
+                        Usuario
+                    </label>
+                    <div class="relative flex items-center">
+                        <span class="material-symbols-outlined absolute left-3 text-outline text-lg">person</span>
+                        <input autocomplete="username" class="w-full bg-white border border-outline-variant rounded-xl pl-9 pr-3 py-2 text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all placeholder:text-outline" id="usuario" name="usuario" placeholder="Ingresa tu usuario" required type="text">
+                    </div>
+                </div>
+
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1" for="clave">
+                        Contraseña
+                    </label>
+                    <div class="relative flex items-center">
+                        <span class="material-symbols-outlined absolute left-3 text-outline text-lg">lock</span>
+                        <input autocomplete="current-password" class="w-full bg-white border border-outline-variant rounded-xl pl-9 pr-10 py-2 text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary focus:outline-none transition-all placeholder:text-outline" id="clave" name="clave" placeholder="••••••••" required type="password">
+                    </div>
+                </div>
+
+                <button class="w-full btn-glow text-on-primary font-display font-bold py-2.5 rounded-xl flex items-center justify-center gap-2 text-sm mt-3" type="submit">
+                    <span class="material-symbols-outlined text-sm">login</span>
+                    <span>Acceder al Sistema</span>
+                </button>
+            </form>
+        </div>
+    </div>
+</body>
+</html>

@@ -1,0 +1,636 @@
+{% extends "base.html" %}
+
+{% block title %}Gobernanza y Seguridad | Sistema Analítico{% endblock %}
+{% block page_title %}Gobernanza y Control de Acceso{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Encabezado de Gobernanza -->
+    <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+            <h3 class="font-display font-black text-lg text-primary flex items-center gap-2">
+                <span class="material-symbols-outlined text-xl">admin_panel_settings</span>
+                Gobernanza Institucional y Control de Acceso
+            </h3>
+            <p class="text-xs text-on-surface-variant mt-1">Administración de identidades, roles, privilegios de pantallas, cubos analíticos y matrices de excepciones.</p>
+        </div>
+        <div class="flex items-center gap-2">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-secondary/10 text-secondary border border-secondary/20">
+                <span class="w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+                Matriz Activa
+            </span>
+        </div>
+    </div>
+
+    <!-- Barra de Navegación de Pestañas de Seguridad -->
+    <div class="bg-white rounded-2xl border border-outline-variant/60 shadow-xs p-1.5 flex flex-wrap gap-1.5">
+        <button type="button" onclick="cambiarPestanaSeguridad('usuarios')" id="btn-tab-usuarios" class="px-4 py-2.5 rounded-xl text-xs font-bold transition-all bg-primary text-on-primary shadow-xs flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">group</span>
+            1. Usuarios y Roles
+        </button>
+        <button type="button" onclick="cambiarPestanaSeguridad('vistas-rol')" id="btn-tab-vistas-rol" class="px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-on-surface hover:bg-surface-container flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">pie_chart</span>
+            2. Vistas por Rol
+        </button>
+        <button type="button" onclick="cambiarPestanaSeguridad('pantallas-rol')" id="btn-tab-pantallas-rol" class="px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-on-surface hover:bg-surface-container flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">web</span>
+            3. Pantallas por Rol
+        </button>
+        <button type="button" onclick="cambiarPestanaSeguridad('excepciones-vistas')" id="btn-tab-excepciones-vistas" class="px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-on-surface hover:bg-surface-container flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">tune</span>
+            4. Excepciones de Vistas
+        </button>
+        <button type="button" onclick="cambiarPestanaSeguridad('excepciones-pantallas')" id="btn-tab-excepciones-pantallas" class="px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-on-surface hover:bg-surface-container flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm">rule</span>
+            5. Excepciones de Pantallas
+        </button>
+    </div>
+
+    <!-- PESTAÑA 1: USUARIOS Y ROLES -->
+    <div id="tab-sec-usuarios" class="space-y-6">
+        <!-- Usuarios Registrados -->
+        <div class="bg-white rounded-2xl border border-outline-variant/60 shadow-xs overflow-hidden">
+            <div class="p-5 border-b border-outline-variant/40 flex items-center justify-between">
+                <div>
+                    <h4 class="font-display font-bold text-sm text-on-surface">Usuarios Institucionales</h4>
+                    <p class="text-xs text-on-surface-variant">Cuentas habilitadas con autenticación local o vinculación empresarial.</p>
+                </div>
+                <span class="text-xs font-bold px-3 py-1 bg-surface-container rounded-full text-on-surface-variant border border-outline-variant/40">
+                    {{ usuarios|length }} usuarios registrados
+                </span>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr class="bg-surface-container-low text-on-surface-variant font-bold border-b border-outline-variant/40">
+                            <th class="py-3 px-4">Usuario</th>
+                            <th class="py-3 px-4">Nombre Completo</th>
+                            <th class="py-3 px-4">Correo Electrónico</th>
+                            <th class="py-3 px-4">Rol Asignado</th>
+                            <th class="py-3 px-4">Origen</th>
+                            <th class="py-3 px-4">Estado</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-outline-variant/30 text-on-surface">
+                        {% for u in usuarios %}
+                        <tr class="hover:bg-surface-container-low/50 transition-colors">
+                            <td class="py-3 px-4 font-mono font-bold text-primary">{{ u.nombreUsuario }}</td>
+                            <td class="py-3 px-4 font-bold">{{ u.nombreCompleto }}</td>
+                            <td class="py-3 px-4 text-on-surface-variant">{{ u.correoElectronico }}</td>
+                            <td class="py-3 px-4">
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold bg-primary/10 text-primary">
+                                    {{ u.rol.nombreRol if u.rol else 'Sin Rol' }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4 font-mono text-[11px] text-outline">{{ u.origenAutenticacion }}</td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-0.5 rounded-md text-[10px] font-bold {% if u.activo %}bg-secondary/10 text-secondary{% else %}bg-error-container text-error{% endif %}">
+                                    {{ 'Activo' if u.activo else 'Inactivo' }}
+                                </span>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Roles y Permisos Granulares -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs">
+                <h4 class="font-display font-bold text-sm text-on-surface mb-3 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">badge</span>
+                    Roles Institucionales
+                </h4>
+                <div class="space-y-3">
+                    {% for r in roles %}
+                    <div class="p-3.5 rounded-xl bg-surface-container-low border border-outline-variant/50 flex items-center justify-between">
+                        <div>
+                            <p class="font-bold text-xs text-primary">{{ r.nombreRol }}</p>
+                            <p class="text-[11px] text-on-surface-variant mt-0.5">{{ r.descripcion }}</p>
+                        </div>
+                        <span class="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-white text-primary border border-outline-variant/40 shadow-xs">
+                            {{ r.usuarios|length }} usuarios
+                        </span>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs">
+                <h4 class="font-display font-bold text-sm text-on-surface mb-3 flex items-center gap-2">
+                    <span class="material-symbols-outlined text-secondary">vpn_key</span>
+                    Permisos del Sistema
+                </h4>
+                <div class="space-y-3">
+                    {% for p in permisos %}
+                    <div class="p-3 rounded-xl bg-surface-container-low border border-outline-variant/50">
+                        <p class="font-mono font-bold text-xs text-secondary">{{ p.codigoPermiso }}</p>
+                        <p class="text-[11px] text-on-surface-variant mt-0.5">{{ p.nombrePermiso }}: {{ p.descripcion }}</p>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- PESTAÑA 2: VISTAS POR ROL -->
+    <div id="tab-sec-vistas-rol" class="hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                <div>
+                    <h4 class="font-display font-bold text-sm text-on-surface flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">pie_chart</span>
+                        Asignación de Cubos y Vistas Analíticas por Rol
+                    </h4>
+                    <p class="text-xs text-on-surface-variant mt-0.5">Selecciona el rol institucional para definir los cubos que sus usuarios podrán explorar por defecto.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <label class="text-xs font-bold text-on-surface-variant">Seleccionar Rol:</label>
+                    <select id="selectRolVistas" onchange="cargarVistasDeRolSeleccionado()" class="bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-primary">
+                        {% for r in roles %}
+                        <option value="{{ r.idRol }}">{{ r.nombreRol }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr class="bg-surface-container-low text-on-surface-variant font-bold border-b border-outline-variant/40">
+                            <th class="py-3 px-4 w-12 text-center">Acceso</th>
+                            <th class="py-3 px-4">Código Vista</th>
+                            <th class="py-3 px-4">Nombre de la Vista</th>
+                            <th class="py-3 px-4">Tipo Ingesta</th>
+                            <th class="py-3 px-4">Archivo Parquet</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-outline-variant/30 text-on-surface">
+                        {% for v in vistas %}
+                        <tr class="hover:bg-surface-container-low/50 transition-colors">
+                            <td class="py-3 px-4 text-center">
+                                <input type="checkbox" id="chk_vista_{{ v.idVista }}" value="{{ v.idVista }}" class="check-vista-rol w-4 h-4 text-primary rounded border-outline-variant focus:ring-0">
+                            </td>
+                            <td class="py-3 px-4 font-mono font-bold text-primary">{{ v.codigoVista }}</td>
+                            <td class="py-3 px-4 font-bold">{{ v.nombreVista }}</td>
+                            <td class="py-3 px-4">
+                                <span class="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-surface-container text-on-surface-variant border border-outline-variant/40">
+                                    {{ v.tipoIngesta }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4 font-mono text-[11px] text-outline truncate max-w-xs">{{ v.rutaArchivoParquet or 'En memoria' }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="mt-6 flex justify-end">
+                <button type="button" onclick="guardarAsignacionVistasRol()" class="btn-glow text-on-primary font-bold px-6 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-sm">
+                    <span class="material-symbols-outlined text-sm">save</span>
+                    Guardar Asignación de Vistas
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PESTAÑA 3: PANTALLAS POR ROL -->
+    <div id="tab-sec-pantallas-rol" class="hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs">
+            <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-6">
+                <div>
+                    <h4 class="font-display font-bold text-sm text-on-surface flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">web</span>
+                        Asignación de Pantallas y Módulos del Sistema por Rol
+                    </h4>
+                    <p class="text-xs text-on-surface-variant mt-0.5">Controla qué pantallas de navegación lateral están autorizadas para cada rol.</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <label class="text-xs font-bold text-on-surface-variant">Seleccionar Rol:</label>
+                    <select id="selectRolPantallas" onchange="cargarPantallasDeRolSeleccionado()" class="bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-primary">
+                        {% for r in roles %}
+                        <option value="{{ r.idRol }}">{{ r.nombreRol }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {% for p in pantallas %}
+                <div class="p-4 rounded-xl bg-surface-container-low border border-outline-variant/60 flex items-center justify-between hover:border-primary/50 transition-all">
+                    <div class="flex items-center gap-3">
+                        <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold">
+                            <span class="material-symbols-outlined text-xl">{{ p.icono }}</span>
+                        </div>
+                        <div>
+                            <p class="font-bold text-xs text-on-surface">{{ p.nombrePantalla }}</p>
+                            <p class="text-[11px] font-mono text-primary">{{ p.rutaPantalla }}</p>
+                            <p class="text-[10px] text-on-surface-variant mt-0.5">{{ p.descripcion }}</p>
+                        </div>
+                    </div>
+                    <label class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="chk_pantalla_{{ p.idPantalla }}" value="{{ p.idPantalla }}" class="check-pantalla-rol sr-only peer">
+                        <div class="w-11 h-6 bg-surface-container peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary"></div>
+                    </label>
+                </div>
+                {% endfor %}
+            </div>
+
+            <div class="mt-6 flex justify-end">
+                <button type="button" onclick="guardarAsignacionPantallasRol()" class="btn-glow text-on-primary font-bold px-6 py-2.5 rounded-xl text-xs flex items-center gap-2 shadow-sm">
+                    <span class="material-symbols-outlined text-sm">save</span>
+                    Guardar Asignación de Pantallas
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- PESTAÑA 4: EXCEPCIONES DE VISTAS POR USUARIO -->
+    <div id="tab-sec-excepciones-vistas" class="hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs">
+            <h4 class="font-display font-bold text-sm text-on-surface flex items-center gap-2 mb-1">
+                <span class="material-symbols-outlined text-primary">tune</span>
+                Registrar Nueva Excepción de Vista Analítica por Usuario
+            </h4>
+            <p class="text-xs text-on-surface-variant mb-4">Permite conceder (+) o revocar (-) acceso a un cubo específico para un usuario, primando sobre su rol.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 rounded-xl bg-surface-container-low border border-outline-variant/60">
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Usuario</label>
+                    <select id="excVistaUsuario" class="w-full bg-white border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface">
+                        {% for u in usuarios %}
+                        <option value="{{ u.idUsuario }}">{{ u.nombreUsuario }} ({{ u.rol.nombreRol if u.rol else 'Sin Rol' }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Vista / Cubo Analítico</label>
+                    <select id="excVistaId" class="w-full bg-white border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-primary font-mono">
+                        {% for v in vistas %}
+                        <option value="{{ v.idVista }}">{{ v.codigoVista }} - {{ v.nombreVista }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Tipo de Regla</label>
+                    <select id="excVistaPermitido" class="w-full bg-white border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold">
+                        <option value="true" class="text-secondary font-bold">✅ Conceder Acceso (+)</option>
+                        <option value="false" class="text-error font-bold">❌ Revocar Acceso (-)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Motivo / Justificación</label>
+                    <input type="text" id="excVistaMotivo" placeholder="Ej: Autorización Auditoría Q3" class="w-full bg-white border border-outline-variant rounded-xl px-3 py-2 text-xs text-on-surface">
+                </div>
+            </div>
+
+            <div class="mt-4 flex justify-end">
+                <button type="button" onclick="guardarExcepcionVista()" class="bg-primary text-on-primary font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 hover:bg-primary-container">
+                    <span class="material-symbols-outlined text-sm">add_circle</span>
+                    Aplicar Excepción de Vista
+                </button>
+            </div>
+        </div>
+
+        <!-- Tabla de Excepciones de Vistas Existentes -->
+        <div class="bg-white rounded-2xl border border-outline-variant/60 shadow-xs overflow-hidden">
+            <div class="p-5 border-b border-outline-variant/40">
+                <h4 class="font-display font-bold text-sm text-on-surface">Matriz Activa de Excepciones de Vistas</h4>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr class="bg-surface-container-low text-on-surface-variant font-bold border-b border-outline-variant/40">
+                            <th class="py-3 px-4">Usuario</th>
+                            <th class="py-3 px-4">Rol Base</th>
+                            <th class="py-3 px-4">Cubo / Vista</th>
+                            <th class="py-3 px-4">Regla</th>
+                            <th class="py-3 px-4">Motivo</th>
+                            <th class="py-3 px-4 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-outline-variant/30 text-on-surface">
+                        {% if not excepciones_vistas %}
+                        <tr>
+                            <td colspan="6" class="py-6 text-center text-on-surface-variant">No hay excepciones de vistas configuradas. El acceso opera estrictamente por roles.</td>
+                        </tr>
+                        {% endif %}
+                        {% for ev in excepciones_vistas %}
+                        <tr class="hover:bg-surface-container-low/50 transition-colors">
+                            <td class="py-3 px-4 font-mono font-bold text-primary">{{ ev.usuario.nombreUsuario }}</td>
+                            <td class="py-3 px-4 text-outline">{{ ev.usuario.rol.nombreRol if ev.usuario.rol else 'Sin Rol' }}</td>
+                            <td class="py-3 px-4 font-mono font-bold">{{ ev.vista.codigoVista }}</td>
+                            <td class="py-3 px-4">
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold {% if ev.permitido %}bg-secondary/10 text-secondary border border-secondary/20{% else %}bg-error-container text-error border border-error/20{% endif %}">
+                                    {{ 'CONCEDIDO (+)' if ev.permitido else 'REVOCADO (-)' }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4 text-on-surface-variant">{{ ev.motivo or 'Sin justificación' }}</td>
+                            <td class="py-3 px-4 text-center">
+                                <button type="button" onclick="eliminarExcepcionVista({{ ev.idExcepcion }})" class="text-error hover:bg-error-container/40 p-1.5 rounded-lg transition-colors" title="Eliminar regla">
+                                    <span class="material-symbols-outlined text-base">delete</span>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- PESTAÑA 5: EXCEPCIONES DE PANTALLAS POR USUARIO -->
+    <div id="tab-sec-excepciones-pantallas" class="hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs">
+            <h4 class="font-display font-bold text-sm text-on-surface flex items-center gap-2 mb-1">
+                <span class="material-symbols-outlined text-primary">rule</span>
+                Registrar Nueva Excepción de Pantalla del Sistema por Usuario
+            </h4>
+            <p class="text-xs text-on-surface-variant mb-4">Concede o revoca el acceso a un módulo específico del sistema independientemente del rol del usuario.</p>
+
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 p-4 rounded-xl bg-surface-container-low border border-outline-variant/60">
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Usuario</label>
+                    <select id="excPantallaUsuario" class="w-full bg-white border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface">
+                        {% for u in usuarios %}
+                        <option value="{{ u.idUsuario }}">{{ u.nombreUsuario }} ({{ u.rol.nombreRol if u.rol else 'Sin Rol' }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Pantalla / Módulo</label>
+                    <select id="excPantallaId" class="w-full bg-white border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-primary">
+                        {% for p in pantallas %}
+                        <option value="{{ p.idPantalla }}">{{ p.nombrePantalla }} ({{ p.rutaPantalla }})</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Tipo de Regla</label>
+                    <select id="excPantallaPermitido" class="w-full bg-white border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold">
+                        <option value="true" class="text-secondary font-bold">✅ Conceder Pantalla (+)</option>
+                        <option value="false" class="text-error font-bold">❌ Revocar Pantalla (-)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Motivo / Justificación</label>
+                    <input type="text" id="excPantallaMotivo" placeholder="Ej: Excepción temporal de carga" class="w-full bg-white border border-outline-variant rounded-xl px-3 py-2 text-xs text-on-surface">
+                </div>
+            </div>
+
+            <div class="mt-4 flex justify-end">
+                <button type="button" onclick="guardarExcepcionPantalla()" class="bg-primary text-on-primary font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-2 hover:bg-primary-container">
+                    <span class="material-symbols-outlined text-sm">add_circle</span>
+                    Aplicar Excepción de Pantalla
+                </button>
+            </div>
+        </div>
+
+        <!-- Tabla de Excepciones de Pantallas Existentes -->
+        <div class="bg-white rounded-2xl border border-outline-variant/60 shadow-xs overflow-hidden">
+            <div class="p-5 border-b border-outline-variant/40">
+                <h4 class="font-display font-bold text-sm text-on-surface">Matriz Activa de Excepciones de Pantallas</h4>
+            </div>
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse text-xs">
+                    <thead>
+                        <tr class="bg-surface-container-low text-on-surface-variant font-bold border-b border-outline-variant/40">
+                            <th class="py-3 px-4">Usuario</th>
+                            <th class="py-3 px-4">Rol Base</th>
+                            <th class="py-3 px-4">Pantalla</th>
+                            <th class="py-3 px-4">Ruta</th>
+                            <th class="py-3 px-4">Regla</th>
+                            <th class="py-3 px-4">Motivo</th>
+                            <th class="py-3 px-4 text-center">Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-outline-variant/30 text-on-surface">
+                        {% if not excepciones_pantallas %}
+                        <tr>
+                            <td colspan="7" class="py-6 text-center text-on-surface-variant">No hay excepciones de pantallas configuradas. Las pantallas se rigen por los roles.</td>
+                        </tr>
+                        {% endif %}
+                        {% for ep in excepciones_pantallas %}
+                        <tr class="hover:bg-surface-container-low/50 transition-colors">
+                            <td class="py-3 px-4 font-mono font-bold text-primary">{{ ep.usuario.nombreUsuario }}</td>
+                            <td class="py-3 px-4 text-outline">{{ ep.usuario.rol.nombreRol if ep.usuario.rol else 'Sin Rol' }}</td>
+                            <td class="py-3 px-4 font-bold">{{ ep.pantalla.nombrePantalla }}</td>
+                            <td class="py-3 px-4 font-mono text-primary">{{ ep.pantalla.rutaPantalla }}</td>
+                            <td class="py-3 px-4">
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold {% if ep.permitido %}bg-secondary/10 text-secondary border border-secondary/20{% else %}bg-error-container text-error border border-error/20{% endif %}">
+                                    {{ 'CONCEDIDO (+)' if ep.permitido else 'REVOCADO (-)' }}
+                                </span>
+                            </td>
+                            <td class="py-3 px-4 text-on-surface-variant">{{ ep.motivo or 'Sin justificación' }}</td>
+                            <td class="py-3 px-4 text-center">
+                                <button type="button" onclick="eliminarExcepcionPantalla({{ ep.idExcepcion }})" class="text-error hover:bg-error-container/40 p-1.5 rounded-lg transition-colors" title="Eliminar regla">
+                                    <span class="material-symbols-outlined text-base">delete</span>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Datos iniciales de matrices inyectados desde el backend
+    const matrizVistasRol = {{ matriz_vistas_rol|tojson }};
+    const matrizPantallasRol = {{ matriz_pantallas_rol|tojson }};
+
+    function cambiarPestanaSeguridad(idTab) {
+        ['usuarios', 'vistas-rol', 'pantallas-rol', 'excepciones-vistas', 'excepciones-pantallas'].forEach(t => {
+            const sec = document.getElementById(`tab-sec-${t}`);
+            const btn = document.getElementById(`btn-tab-${t}`);
+            if (t === idTab) {
+                sec.classList.remove('hidden');
+                btn.className = "px-4 py-2.5 rounded-xl text-xs font-bold transition-all bg-primary text-on-primary shadow-xs flex items-center gap-2";
+            } else {
+                sec.classList.add('hidden');
+                btn.className = "px-4 py-2.5 rounded-xl text-xs font-bold transition-all text-on-surface hover:bg-surface-container flex items-center gap-2";
+            }
+        });
+
+        if (idTab === 'vistas-rol') cargarVistasDeRolSeleccionado();
+        if (idTab === 'pantallas-rol') cargarPantallasDeRolSeleccionado();
+    }
+
+    function cargarVistasDeRolSeleccionado() {
+        const idRol = document.getElementById('selectRolVistas').value;
+        const vistasAsignadas = matrizVistasRol[idRol] || [];
+        document.querySelectorAll('.check-vista-rol').forEach(chk => {
+            chk.checked = vistasAsignadas.includes(parseInt(chk.value));
+        });
+    }
+
+    function cargarPantallasDeRolSeleccionado() {
+        const idRol = document.getElementById('selectRolPantallas').value;
+        const pantallasAsignadas = matrizPantallasRol[idRol] || [];
+        document.querySelectorAll('.check-pantalla-rol').forEach(chk => {
+            chk.checked = pantallasAsignadas.includes(parseInt(chk.value));
+        });
+    }
+
+    async function guardarAsignacionVistasRol() {
+        const idRol = document.getElementById('selectRolVistas').value;
+        const checks = Array.from(document.querySelectorAll('.check-vista-rol:checked')).map(c => parseInt(c.value));
+
+        const resp = await fetch(`/api/seguridad/roles/${idRol}/vistas`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idsVistas: checks })
+        });
+        const data = await resp.json();
+        if (data.exito) {
+            matrizVistasRol[idRol] = checks;
+            mostrarModalAlerta({
+                titulo: 'Asignación Actualizada',
+                mensaje: '¡Vistas asignadas al rol exitosamente!',
+                tipo: 'exito'
+            });
+        } else {
+            mostrarModalAlerta({
+                titulo: 'Error de Asignación',
+                mensaje: data.error || 'Fallo desconocido',
+                tipo: 'error'
+            });
+        }
+    }
+
+    async function guardarAsignacionPantallasRol() {
+        const idRol = document.getElementById('selectRolPantallas').value;
+        const checks = Array.from(document.querySelectorAll('.check-pantalla-rol:checked')).map(c => parseInt(c.value));
+
+        const resp = await fetch(`/api/seguridad/roles/${idRol}/pantallas`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idsPantallas: checks })
+        });
+        const data = await resp.json();
+        if (data.exito) {
+            matrizPantallasRol[idRol] = checks;
+            mostrarModalAlerta({
+                titulo: 'Asignación Actualizada',
+                mensaje: '¡Pantallas asignadas al rol exitosamente!',
+                tipo: 'exito'
+            });
+        } else {
+            mostrarModalAlerta({
+                titulo: 'Error de Asignación',
+                mensaje: data.error || 'Fallo desconocido',
+                tipo: 'error'
+            });
+        }
+    }
+
+    async function guardarExcepcionVista() {
+        const idUsuario = document.getElementById('excVistaUsuario').value;
+        const idVista = document.getElementById('excVistaId').value;
+        const permitido = document.getElementById('excVistaPermitido').value === 'true';
+        const motivo = document.getElementById('excVistaMotivo').value;
+
+        const resp = await fetch(`/api/seguridad/usuarios/${idUsuario}/excepciones-vista`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idVista, permitido, motivo })
+        });
+        const data = await resp.json();
+        if (data.exito) {
+            mostrarModalAlerta({
+                titulo: 'Excepción Registrada',
+                mensaje: '¡Excepción de vista registrada exitosamente!',
+                tipo: 'exito',
+                alAceptar: () => window.location.reload()
+            });
+        } else {
+            mostrarModalAlerta({
+                titulo: 'Error en Excepción',
+                mensaje: data.error || 'Fallo desconocido',
+                tipo: 'error'
+            });
+        }
+    }
+
+    async function eliminarExcepcionVista(idExcepcion) {
+        const confirmado = await mostrarModalConfirmacion({
+            titulo: 'Eliminar Excepción de Vista',
+            mensaje: '¿Estás seguro de que deseas eliminar esta regla de excepción de vista?',
+            tipo: 'advertencia',
+            textoConfirmar: 'Eliminar Regla',
+            textoCancelar: 'Cancelar'
+        });
+        if (!confirmado) return;
+        const resp = await fetch(`/api/seguridad/excepciones-vista/${idExcepcion}`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (data.exito) {
+            window.location.reload();
+        } else {
+            mostrarModalAlerta({
+                titulo: 'Error al Eliminar',
+                mensaje: data.error || 'Fallo desconocido',
+                tipo: 'error'
+            });
+        }
+    }
+
+    async function guardarExcepcionPantalla() {
+        const idUsuario = document.getElementById('excPantallaUsuario').value;
+        const idPantalla = document.getElementById('excPantallaId').value;
+        const permitido = document.getElementById('excPantallaPermitido').value === 'true';
+        const motivo = document.getElementById('excPantallaMotivo').value;
+
+        const resp = await fetch(`/api/seguridad/usuarios/${idUsuario}/excepciones-pantalla`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ idPantalla, permitido, motivo })
+        });
+        const data = await resp.json();
+        if (data.exito) {
+            mostrarModalAlerta({
+                titulo: 'Excepción Registrada',
+                mensaje: '¡Excepción de pantalla registrada exitosamente!',
+                tipo: 'exito',
+                alAceptar: () => window.location.reload()
+            });
+        } else {
+            mostrarModalAlerta({
+                titulo: 'Error en Excepción',
+                mensaje: data.error || 'Fallo desconocido',
+                tipo: 'error'
+            });
+        }
+    }
+
+    async function eliminarExcepcionPantalla(idExcepcion) {
+        const confirmado = await mostrarModalConfirmacion({
+            titulo: 'Eliminar Excepción de Pantalla',
+            mensaje: '¿Estás seguro de que deseas eliminar esta regla de excepción de pantalla?',
+            tipo: 'advertencia',
+            textoConfirmar: 'Eliminar Regla',
+            textoCancelar: 'Cancelar'
+        });
+        if (!confirmado) return;
+        const resp = await fetch(`/api/seguridad/excepciones-pantalla/${idExcepcion}`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (data.exito) {
+            window.location.reload();
+        } else {
+            mostrarModalAlerta({
+                titulo: 'Error al Eliminar',
+                mensaje: data.error || 'Fallo desconocido',
+                tipo: 'error'
+            });
+        }
+    }
+
+    // Inicializar la vista cargando las pestañas
+    document.addEventListener('DOMContentLoaded', () => {
+        cargarVistasDeRolSeleccionado();
+        cargarPantallasDeRolSeleccionado();
+    });
+</script>
+{% endblock %}

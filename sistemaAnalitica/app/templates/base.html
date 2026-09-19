@@ -1,0 +1,501 @@
+<!DOCTYPE html>
+<html class="light" lang="es">
+<head>
+    <meta charset="utf-8">
+    <title>{% block title %}Cubix | Inteligencia Analítica y Cubos OLAP{% endblock %}</title>
+    <link rel="icon" type="image/jpeg" href="/static/img/logo.jpg?v=3">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Hanken+Grotesk:wght@600;700;800&display=swap" rel="stylesheet">
+
+    <!-- Material Symbols -->
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+
+    <!-- Plotly.js para gráficos analíticos interactivos -->
+    <script src="https://cdn.plot.ly/plotly-2.32.0.min.js"></script>
+
+    <!-- Tailwind CSS con configuración corporativa idéntica a Knowledge Base -->
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#004482",
+                        "primary-container": "#005cab",
+                        "on-primary": "#ffffff",
+                        "on-primary-container": "#bdd6ff",
+                        "primary-fixed": "#d5e3ff",
+                        "secondary": "#006e20",
+                        "secondary-container": "#e8f5e9",
+                        "on-secondary-container": "#004d14",
+                        "background": "#f9f9fc",
+                        "surface": "#ffffff",
+                        "surface-dim": "#dadadc",
+                        "surface-bright": "#f9f9fc",
+                        "surface-container-low": "#f3f3f6",
+                        "surface-container": "#eeeef0",
+                        "surface-container-high": "#e8e8ea",
+                        "surface-container-lowest": "#ffffff",
+                        "on-surface": "#1a1c1e",
+                        "on-surface-variant": "#414751",
+                        "outline": "#727783",
+                        "outline-variant": "#c1c6d3",
+                        "error": "#ba1a1a",
+                        "error-container": "#ffdad6",
+                        "on-error-container": "#93000a"
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "2xl": "1rem",
+                        "full": "9999px"
+                    },
+                    fontFamily: {
+                        body: ["Inter", "sans-serif"],
+                        display: ["Hanken Grotesk", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
+            display: inline-block;
+            vertical-align: middle;
+        }
+        .glass-card {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 8px 32px 0 rgba(0, 68, 130, 0.08);
+        }
+        .mesh-gradient {
+            background-color: #f9f9fc;
+            background-image: 
+                radial-gradient(at 0% 0%, rgba(0, 68, 130, 0.12) 0px, transparent 50%),
+                radial-gradient(at 100% 0%, rgba(0, 110, 32, 0.10) 0px, transparent 50%),
+                radial-gradient(at 100% 100%, rgba(0, 68, 130, 0.08) 0px, transparent 50%),
+                radial-gradient(at 0% 100%, rgba(0, 110, 32, 0.06) 0px, transparent 50%);
+            background-attachment: fixed;
+        }
+        .btn-glow {
+            background: linear-gradient(135deg, #004482 0%, #005cab 100%);
+            box-shadow: 0 4px 15px rgba(0, 68, 130, 0.25);
+            transition: all 0.25s ease;
+        }
+        .btn-glow:hover {
+            box-shadow: 0 6px 20px rgba(0, 68, 130, 0.35);
+            transform: translateY(-1px);
+        }
+        .btn-glow:active {
+            transform: scale(0.98);
+        }
+        .financial-card {
+            border-top: 4px solid #004482;
+            transition: all 0.2s ease-in-out;
+        }
+        .financial-card:hover {
+            box-shadow: 0px 6px 22px rgba(0, 68, 130, 0.08);
+        }
+        #main-sidebar.collapsed {
+            width: 76px !important;
+        }
+        #main-sidebar.collapsed .sidebar-text {
+            display: none !important;
+        }
+        #main-content.collapsed-margin {
+            margin-left: 76px !important;
+        }
+    </style>
+    {% block extra_head %}{% endblock %}
+</head>
+<body class="mesh-gradient font-body text-on-surface min-h-screen flex flex-col antialiased">
+
+    <!-- Barra Lateral de Navegación (Sidebar) -->
+    <aside id="main-sidebar" class="fixed top-0 left-0 h-screen w-64 bg-white/95 backdrop-blur-md border-r border-outline-variant/60 z-40 transition-all duration-300 flex flex-col justify-between p-4 shadow-sm">
+        <div>
+            <!-- Logotipo y Nombre del Sistema -->
+            <div class="flex items-center gap-3 px-2 py-3 mb-6 border-b border-outline-variant/40">
+                <img src="/static/img/logo.jpg?v=3" alt="Cubix" class="w-11 h-11 rounded-xl object-contain bg-white p-1 border border-outline-variant/40 shrink-0 shadow-sm">
+                <div class="sidebar-text overflow-hidden">
+                    <h1 class="font-display font-black text-primary text-base tracking-tight leading-tight">Cubix</h1>
+                    <p class="text-[11px] text-on-surface-variant font-medium">Cubos OLAP y Analítica</p>
+                </div>
+            </div>
+
+            <!-- Menú de Enlaces Dinámico según Roles y Excepciones -->
+            <nav class="space-y-1.5">
+                {% if user and user.pantallasPermitidas %}
+                    {% for p in user.pantallasPermitidas %}
+                    <a href="{{ p.rutaPantalla }}" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all {% if (ruta_activa == 'inicio' and p.codigoPantalla == 'INICIO') or (ruta_activa == 'ingesta' and p.codigoPantalla == 'INGESTA') or (ruta_activa == 'explorador' and p.codigoPantalla == 'EXPLORADOR') or (ruta_activa == 'seguridad' and p.codigoPantalla == 'SEGURIDAD') or (ruta_activa == 'configuracion_vistas' and p.codigoPantalla == 'CONFIGURACION_VISTAS') or (ruta_activa == 'administracion_cubos' and p.codigoPantalla == 'ADMINISTRACION_CUBOS') or (ruta_activa == 'administracion_vistas' and p.codigoPantalla == 'ADMINISTRACION_VISTAS') or (ruta_activa == 'eliminacion_objetos' and p.codigoPantalla == 'ELIMINACION_OBJETOS') %}bg-primary text-on-primary shadow-sm{% else %}text-on-surface hover:bg-surface-container-low hover:text-primary{% endif %}">
+                        <span class="material-symbols-outlined text-lg">{{ p.icono }}</span>
+                        <span class="sidebar-text">{{ p.nombrePantalla }}</span>
+                    </a>
+                    {% endfor %}
+                {% else %}
+                    <a href="/" class="flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-all {% if ruta_activa == 'inicio' %}bg-primary text-on-primary shadow-sm{% else %}text-on-surface hover:bg-surface-container-low hover:text-primary{% endif %}">
+                        <span class="material-symbols-outlined text-lg">dashboard</span>
+                        <span class="sidebar-text">Panel Principal</span>
+                    </a>
+                {% endif %}
+            </nav>
+        </div>
+
+        <!-- Perfil Inferior y Cierre de Sesión -->
+        <div class="border-t border-outline-variant/40 pt-4">
+            <div class="flex items-center justify-between px-2 py-2 bg-surface-container-low rounded-xl">
+                <div class="flex items-center gap-2 overflow-hidden">
+                    <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center font-bold text-xs shrink-0">
+                        {{ user.nombreUsuario[:2].upper() if user else 'US' }}
+                    </div>
+                    <div class="sidebar-text overflow-hidden text-left">
+                        <p class="text-xs font-bold text-on-surface truncate">{{ user.nombreCompleto if user else 'Usuario' }}</p>
+                        <p class="text-[10px] text-secondary font-bold truncate">{{ user.nombreRol if user else 'Rol' }}</p>
+                    </div>
+                </div>
+                <a href="/logout" title="Cerrar Sesión" class="text-outline hover:text-error transition-colors p-1.5 rounded-lg hover:bg-error-container/40 flex items-center">
+                    <span class="material-symbols-outlined text-lg">logout</span>
+                </a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Contenido Principal -->
+    <div id="main-content" class="ml-64 flex-1 flex flex-col transition-all duration-300">
+        <!-- Barra Superior (Header) -->
+        <header class="sticky top-0 z-30 bg-white/80 backdrop-blur-md border-b border-outline-variant/60 h-16 flex items-center justify-between px-6 shadow-xs">
+            <div class="flex items-center gap-3">
+                <button type="button" onclick="toggleSidebar()" class="p-2 rounded-lg text-outline hover:text-on-surface hover:bg-surface-container transition-all">
+                    <span class="material-symbols-outlined text-xl">menu</span>
+                </button>
+                <div class="text-xs text-on-surface-variant flex items-center gap-1.5 font-medium">
+                    <span>Cubix</span>
+                    <span class="material-symbols-outlined text-xs">chevron_right</span>
+                    <span class="font-bold text-primary">{% block page_title %}Inicio{% endblock %}</span>
+                </div>
+            </div>
+
+            <!-- Estado de Sesión y Badges -->
+            <div class="flex items-center gap-3">
+                <span class="text-xs font-bold text-on-surface hidden md:inline">
+                    {{ user.nombreCompleto if user else '' }}
+                </span>
+            </div>
+        </header>
+
+        <!-- Cuerpo de la Página -->
+        <main class="flex-1 p-6 md:p-8 max-w-7xl w-full mx-auto">
+            {% block content %}{% endblock %}
+        </main>
+    </div>
+
+    <!-- Modal Global de Alertas, Confirmaciones y Notificaciones del Sistema -->
+    <div id="modalGlobalSistema" class="fixed inset-0 z-50 hidden flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm transition-opacity duration-200">
+        <div id="modalGlobalCard" class="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 border border-outline-variant/60 transform transition-all duration-200 scale-95 opacity-0 text-center space-y-4">
+            <!-- Icono Temático -->
+            <div id="modalGlobalIconoContenedor" class="w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-inner transition-all">
+                <span id="modalGlobalIcono" class="material-symbols-outlined text-4xl">info</span>
+            </div>
+
+            <!-- Título y Mensaje -->
+            <div>
+                <h3 id="modalGlobalTitulo" class="text-base font-black font-display text-slate-800 tracking-tight">Notificación</h3>
+                <div id="modalGlobalMensaje" class="text-xs text-slate-600 mt-1.5 whitespace-pre-line leading-relaxed font-medium"></div>
+            </div>
+
+            <!-- Contenedor Opcional de Detalles / Metadatos -->
+            <div id="modalGlobalDetalles" class="hidden p-3.5 bg-slate-50 rounded-xl border border-slate-100 text-left text-xs space-y-1.5 font-mono"></div>
+
+            <!-- Botones de Acción -->
+            <div id="modalGlobalBotones" class="pt-2 flex flex-col sm:flex-row gap-2.5 justify-center items-stretch">
+                <!-- Inyectado dinámicamente -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function toggleSidebar() {
+            const sidebar = document.getElementById('main-sidebar');
+            const content = document.getElementById('main-content');
+            sidebar.classList.toggle('collapsed');
+            content.classList.toggle('collapsed-margin');
+        }
+
+        // =========================================================================
+        // SISTEMA UNIFICADO DE MODALES CORPORATIVOS (REEMPLAZO DE ALERT / CONFIRM)
+        // =========================================================================
+        let _modalGlobalResolver = null;
+
+        function cerrarModalGlobal() {
+            const modal = document.getElementById('modalGlobalSistema');
+            const card = document.getElementById('modalGlobalCard');
+            if (!modal) return;
+            card.classList.remove('scale-100', 'opacity-100');
+            card.classList.add('scale-95', 'opacity-0');
+            setTimeout(() => {
+                modal.classList.add('hidden');
+                if (_modalGlobalResolver) {
+                    _modalGlobalResolver(false);
+                    _modalGlobalResolver = null;
+                }
+            }, 180);
+        }
+
+        function _abrirModalDOM() {
+            const modal = document.getElementById('modalGlobalSistema');
+            const card = document.getElementById('modalGlobalCard');
+            modal.classList.remove('hidden');
+            setTimeout(() => {
+                card.classList.remove('scale-95', 'opacity-0');
+                card.classList.add('scale-100', 'opacity-100');
+            }, 10);
+        }
+
+        function _configurarIconoModal(tipo) {
+            const cont = document.getElementById('modalGlobalIconoContenedor');
+            const ico = document.getElementById('modalGlobalIcono');
+            cont.className = "w-16 h-16 rounded-2xl flex items-center justify-center mx-auto shadow-inner transition-all ";
+
+            if (tipo === 'exito') {
+                cont.classList.add('bg-emerald-50', 'text-emerald-600');
+                ico.textContent = 'check_circle';
+            } else if (tipo === 'error') {
+                cont.classList.add('bg-rose-50', 'text-rose-600');
+                ico.textContent = 'error';
+            } else if (tipo === 'advertencia') {
+                cont.classList.add('bg-amber-50', 'text-amber-600');
+                ico.textContent = 'warning';
+            } else if (tipo === 'pregunta') {
+                cont.classList.add('bg-indigo-50', 'text-indigo-600');
+                ico.textContent = 'help';
+            } else {
+                cont.classList.add('bg-blue-50', 'text-primary');
+                ico.textContent = 'info';
+            }
+        }
+
+        /**
+         * Despliega una alerta modal moderna (reemplaza alert nativo).
+         */
+        function mostrarModalAlerta(opciones) {
+            if (typeof opciones === 'string') {
+                opciones = { mensaje: opciones };
+            }
+            const {
+                titulo = 'Notificación del Sistema',
+                mensaje = '',
+                tipo = 'info',
+                textoBoton = 'Entendido',
+                alAceptar = null
+            } = opciones;
+
+            let tipoInferido = tipo;
+            const msgStr = String(mensaje || '');
+            if (tipoInferido === 'info') {
+                if (msgStr.includes('❌') || msgStr.toLowerCase().includes('error') || msgStr.toLowerCase().includes('fallo')) tipoInferido = 'error';
+                else if (msgStr.includes('⚠️') || msgStr.toLowerCase().includes('advertencia') || msgStr.toLowerCase().includes('límite')) tipoInferido = 'advertencia';
+                else if (msgStr.includes('✅') || msgStr.toLowerCase().includes('éxito') || msgStr.toLowerCase().includes('exitosamente')) tipoInferido = 'exito';
+            }
+
+            _configurarIconoModal(tipoInferido);
+            document.getElementById('modalGlobalTitulo').textContent = titulo;
+            document.getElementById('modalGlobalMensaje').textContent = msgStr.replace(/^[❌⚠️✅ℹ️]\s*/, '');
+            document.getElementById('modalGlobalDetalles').classList.add('hidden');
+
+            const btnContenedor = document.getElementById('modalGlobalBotones');
+            btnContenedor.innerHTML = `
+                <button type="button" id="btnModalAceptar" class="btn-glow text-white font-bold px-6 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 w-full sm:w-auto shadow-sm cursor-pointer">
+                    ${textoBoton}
+                </button>
+            `;
+
+            document.getElementById('btnModalAceptar').onclick = () => {
+                cerrarModalGlobal();
+                if (typeof alAceptar === 'function') alAceptar();
+            };
+
+            _abrirModalDOM();
+        }
+
+        /**
+         * Despliega una confirmación modal moderna con promesa (reemplaza confirm nativo).
+         */
+        function mostrarModalConfirmacion(opciones) {
+            return new Promise((resolve) => {
+                if (typeof opciones === 'string') {
+                    opciones = { mensaje: opciones };
+                }
+                const {
+                    titulo = 'Confirmar Acción',
+                    mensaje = '¿Estás seguro de realizar esta acción?',
+                    tipo = 'pregunta',
+                    textoConfirmar = 'Confirmar',
+                    textoCancelar = 'Cancelar',
+                    alConfirmar = null,
+                    alCancelar = null
+                } = opciones;
+
+                _modalGlobalResolver = resolve;
+                _configurarIconoModal(tipo);
+                document.getElementById('modalGlobalTitulo').textContent = titulo;
+                document.getElementById('modalGlobalMensaje').textContent = String(mensaje).replace(/^[❌⚠️✅ℹ️]\s*/, '');
+                document.getElementById('modalGlobalDetalles').classList.add('hidden');
+
+                const btnContenedor = document.getElementById('modalGlobalBotones');
+                btnContenedor.innerHTML = `
+                    <button type="button" id="btnModalCancelar" class="bg-surface-container text-on-surface hover:bg-surface-container-high font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 border border-outline-variant cursor-pointer w-full sm:w-auto">
+                        ${textoCancelar}
+                    </button>
+                    <button type="button" id="btnModalConfirmar" class="btn-glow text-white font-bold px-5 py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer w-full sm:w-auto">
+                        <span class="material-symbols-outlined text-sm">check</span> ${textoConfirmar}
+                    </button>
+                `;
+
+                document.getElementById('btnModalCancelar').onclick = () => {
+                    cerrarModalGlobal();
+                    if (typeof alCancelar === 'function') alCancelar();
+                    resolve(false);
+                };
+
+                document.getElementById('btnModalConfirmar').onclick = () => {
+                    _modalGlobalResolver = null;
+                    cerrarModalGlobal();
+                    if (typeof alConfirmar === 'function') alConfirmar();
+                    resolve(true);
+                };
+
+                _abrirModalDOM();
+            });
+        }
+
+        /**
+         * Modal especializado para la confirmación de éxito al crear o registrar un Cubo.
+         */
+        function mostrarModalExitoCubo({ idCubo, nombreCubo, totalFilas = 0, totalColumnas = 0, mensajeExtra = '' }) {
+            _configurarIconoModal('exito');
+            document.getElementById('modalGlobalTitulo').textContent = '¡Cubo Creado Exitosamente!';
+            document.getElementById('modalGlobalMensaje').innerHTML = `
+                El cubo ha sido generado y materializado en el Data Lake (Parquet ZSTD).
+                ${mensajeExtra ? `<span class="block mt-1 font-semibold text-emerald-700">${mensajeExtra}</span>` : ''}
+            `;
+
+            const det = document.getElementById('modalGlobalDetalles');
+            det.classList.remove('hidden');
+            det.innerHTML = `
+                <div class="flex justify-between items-center py-0.5 border-b border-slate-200/60">
+                    <span class="text-slate-500 font-sans font-medium">Nombre del Cubo:</span>
+                    <span class="font-bold text-primary truncate max-w-[200px]" title="${nombreCubo}">${nombreCubo}</span>
+                </div>
+                ${totalFilas ? `
+                <div class="flex justify-between items-center py-0.5 border-b border-slate-200/60">
+                    <span class="text-slate-500 font-sans font-medium">Total Registros:</span>
+                    <span class="font-bold text-slate-800">${Number(totalFilas).toLocaleString()} filas</span>
+                </div>` : ''}
+                ${totalColumnas ? `
+                <div class="flex justify-between items-center py-0.5">
+                    <span class="text-slate-500 font-sans font-medium">Columnas Preservadas:</span>
+                    <span class="font-bold text-slate-800">${totalColumnas} campos</span>
+                </div>` : ''}
+            `;
+
+            const btnContenedor = document.getElementById('modalGlobalBotones');
+            btnContenedor.innerHTML = `
+                <a href="/administracion/vistas?nuevoConCubo=${idCubo}" class="btn-glow text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 shadow-sm cursor-pointer w-full sm:w-auto">
+                    <span class="material-symbols-outlined text-sm">add_box</span> Crear Vista para este Cubo
+                </a>
+                <a href="/administracion/cubos" class="bg-surface-container text-on-surface hover:bg-surface-container-high font-bold px-4 py-2.5 rounded-xl text-xs flex items-center justify-center gap-1.5 border border-outline-variant cursor-pointer w-full sm:w-auto">
+                    <span class="material-symbols-outlined text-sm">database</span> Ver Cubos
+                </a>
+                <button type="button" onclick="cerrarModalGlobal()" class="text-slate-500 hover:text-slate-700 font-semibold px-3 py-2 rounded-xl text-xs transition-colors cursor-pointer">
+                    Cerrar
+                </button>
+            `;
+
+            _abrirModalDOM();
+        }
+
+        // -------------------------------------------------------------
+        // MONITOR GLOBAL DE INACTIVIDAD DE SESIÓN (20 MINUTOS)
+        // -------------------------------------------------------------
+        (function() {
+            const TIEMPO_LIMITE_MS = 20 * 60 * 1000; // 20 minutos (1,200,000 ms)
+            let temporizadorInactividad = null;
+            let ultimoRegistroEvento = Date.now();
+            let sesionYaExpirada = false;
+
+            function expirarSesionPorInactividad() {
+                if (sesionYaExpirada) return;
+                sesionYaExpirada = true;
+
+                mostrarModalAlerta({
+                    titulo: 'Sesión Expirada por Inactividad',
+                    mensaje: 'No se detectó actividad en el sistema durante los últimos 20 minutos. Tu sesión ha finalizado automáticamente por motivos de seguridad.',
+                    tipo: 'advertencia',
+                    textoBoton: 'Iniciar Sesión Nuevamente',
+                    alAceptar: function() {
+                        window.location.href = '/login?inactividad=1';
+                    }
+                });
+
+                // Redirigir de forma automática tras 6 segundos si no se presiona el botón
+                setTimeout(function() {
+                    window.location.href = '/login?inactividad=1';
+                }, 6000);
+            }
+
+            function reiniciarTemporizador() {
+                if (sesionYaExpirada) return;
+                const ahora = Date.now();
+                // Throttling de 1 segundo para no impactar rendimiento en eventos continuos
+                if (ahora - ultimoRegistroEvento < 1000) return;
+                ultimoRegistroEvento = ahora;
+
+                if (temporizadorInactividad) {
+                    clearTimeout(temporizadorInactividad);
+                }
+                temporizadorInactividad = setTimeout(expirarSesionPorInactividad, TIEMPO_LIMITE_MS);
+            }
+
+            // Escuchar eventos de interacción humana
+            const eventosInteraccion = ['mousemove', 'mousedown', 'keydown', 'touchstart', 'scroll', 'click'];
+            eventosInteraccion.forEach(function(evento) {
+                window.addEventListener(evento, reiniciarTemporizador, { passive: true });
+            });
+
+            // Iniciar cuenta regresiva al cargar la página
+            temporizadorInactividad = setTimeout(expirarSesionPorInactividad, TIEMPO_LIMITE_MS);
+        })();
+
+        // Intercepción global para que ningún alert() nativo abra popup del navegador
+        window.alert = function(msg) {
+            mostrarModalAlerta(msg);
+        };
+
+        // Cerrar modal al presionar ESC o hacer clic en el backdrop
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                const modal = document.getElementById('modalGlobalSistema');
+                if (modal && !modal.classList.contains('hidden')) {
+                    cerrarModalGlobal();
+                }
+            }
+        });
+
+        document.addEventListener('click', (e) => {
+            const modal = document.getElementById('modalGlobalSistema');
+            const card = document.getElementById('modalGlobalCard');
+            if (modal && !modal.classList.contains('hidden') && e.target === modal) {
+                cerrarModalGlobal();
+            }
+        });
+    </script>
+    {% block extra_scripts %}{% endblock %}
+</body>
+</html>

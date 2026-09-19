@@ -1,0 +1,719 @@
+{% extends "base.html" %}
+
+{% block title %}Eliminación de Cubos y Vistas | Cubix{% endblock %}
+{% block page_title %}Eliminación de Cubos y Vistas{% endblock %}
+
+{% set ruta_activa = 'eliminacion_objetos' %}
+
+{% block content %}
+<div class="space-y-6 max-w-7xl mx-auto pb-12">
+
+    <!-- Encabezado de Página -->
+    <div class="bg-white p-6 md:p-8 rounded-2xl border border-outline-variant/60 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-6">
+        <div class="max-w-2xl">
+            <h2 class="font-display text-2xl md:text-3xl font-black text-primary tracking-tight flex items-center gap-3">
+                <span class="material-symbols-outlined text-3xl text-error">delete_sweep</span>
+                Depuración y Eliminación Gobernada
+            </h2>
+            <p class="text-xs md:text-sm text-on-surface-variant font-medium mt-2 leading-relaxed">
+                Administra la baja física y lógica de cubos y vistas analíticas. Por regla de integridad referencial,
+                <strong class="text-on-surface">un cubo con vistas asignadas no puede eliminarse</strong> hasta depurar previamente sus vistas. Todas las operaciones quedan registradas de manera inmutable en la auditoría del sistema.
+            </p>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+            <a href="/administracion/cubos" class="px-4 py-2.5 rounded-xl text-xs font-bold text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors flex items-center gap-2">
+                <span class="material-symbols-outlined text-base">view_in_ar</span>
+                Administrar Cubos
+            </a>
+            <a href="/administracion/vistas" class="px-4 py-2.5 rounded-xl text-xs font-bold text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors flex items-center gap-2">
+                <span class="material-symbols-outlined text-base">table_view</span>
+                Administrar Vistas
+            </a>
+        </div>
+    </div>
+
+    <!-- Pestañas de Selección: Cubos, Vistas y Auditoría -->
+    <div class="flex flex-wrap items-center justify-between gap-4 border-b border-outline-variant/60 pb-2">
+        <div class="flex items-center gap-2 p-1 bg-surface-container-low rounded-2xl border border-outline-variant/50">
+            <button type="button" onclick="cambiarPestana('cubos')" id="btnTabCubos" class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-white text-primary shadow-xs">
+                <span class="material-symbols-outlined text-base">view_in_ar</span>
+                <span>Cubos OBT</span>
+                <span id="badgeContadorCubos" class="px-2 py-0.5 rounded-full text-[10px] bg-primary/10 text-primary font-black">{{ cubos|length }}</span>
+            </button>
+            <button type="button" onclick="cambiarPestana('vistas')" id="btnTabVistas" class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 text-on-surface-variant hover:text-on-surface">
+                <span class="material-symbols-outlined text-base">table_view</span>
+                <span>Vistas Analíticas</span>
+                <span id="badgeContadorVistas" class="px-2 py-0.5 rounded-full text-[10px] bg-outline-variant/60 text-on-surface-variant font-black">{{ vistas|length }}</span>
+            </button>
+            <button type="button" onclick="cambiarPestana('auditoria')" id="btnTabAuditoria" class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 text-on-surface-variant hover:text-on-surface">
+                <span class="material-symbols-outlined text-base">history</span>
+                <span>Auditoría de Eliminaciones</span>
+                <span id="badgeContadorAuditoria" class="px-2 py-0.5 rounded-full text-[10px] bg-outline-variant/60 text-on-surface-variant font-black">{{ auditoria|length }}</span>
+            </button>
+        </div>
+
+        <div class="text-xs text-on-surface-variant flex items-center gap-2">
+            <span class="material-symbols-outlined text-sm text-secondary">verified_user</span>
+            <span>Acción protegida bajo rol: <strong>{{ user.nombreRol }}</strong></span>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- PANEL 1: CUBOS OBT                                                    -->
+    <!-- ===================================================================== -->
+    <div id="panelCubos" class="space-y-4">
+        <!-- Barra de Búsqueda y Acciones en Lote de Cubos -->
+        <div class="bg-white p-4 rounded-2xl border border-outline-variant/60 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-3 flex-1 max-w-md">
+                <div class="relative w-full">
+                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-outline text-lg">search</span>
+                    <input type="text" id="filtroCubos" oninput="filtrarTablaCubos()" placeholder="Buscar cubo por nombre o tipo..." class="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-outline-variant/80 bg-surface-container-low focus:bg-white focus:border-primary focus:outline-hidden transition-all">
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <button type="button" id="btnEliminarLoteCubos" onclick="abrirModalEliminarLote('cubos')" disabled class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-error/10 text-error cursor-not-allowed opacity-50">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                    <span>Eliminar Seleccionados</span>
+                    <span id="badgeSeleccionadosCubos" class="px-1.5 py-0.5 rounded-md text-[10px] bg-error text-white font-black hidden">0</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tabla de Cubos OBT -->
+        <div class="bg-white rounded-2xl border border-outline-variant/60 shadow-xs overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="tablaCubos">
+                    <thead>
+                        <tr class="border-b border-outline-variant/40 bg-surface-container-low text-[11px] font-black tracking-wider text-on-surface-variant uppercase">
+                            <th class="py-3.5 px-4 w-12 text-center">
+                                <input type="checkbox" id="checkTodosCubos" onchange="alternarSeleccionTodos('cubos', this.checked)" class="rounded border-outline-variant text-primary focus:ring-primary w-4 h-4 cursor-pointer" title="Seleccionar todos los eliminables">
+                            </th>
+                            <th class="py-3.5 px-4 w-16">ID</th>
+                            <th class="py-3.5 px-4">Nombre del Cubo</th>
+                            <th class="py-3.5 px-4">Origen de Datos</th>
+                            <th class="py-3.5 px-4">Vistas Asignadas</th>
+                            <th class="py-3.5 px-4">Archivo Parquet</th>
+                            <th class="py-3.5 px-4 text-right">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-outline-variant/20 text-xs">
+                        {% for c in cubos %}
+                        <tr class="hover:bg-surface-container-low/40 transition-colors fila-cubo" data-nombre="{{ c.nombreCubo|lower }}" data-origen="{{ c.tipoOrigen|lower }}" id="fila-cubo-{{ c.idCubo }}">
+                            <td class="py-3.5 px-4 text-center">
+                                {% if c.puedeEliminar %}
+                                <input type="checkbox" class="cb-cubo rounded border-outline-variant text-primary focus:ring-primary w-4 h-4 cursor-pointer" value="{{ c.idCubo }}" data-nombre="{{ c.nombreCubo }}" onchange="actualizarEstadoSeleccion('cubos')">
+                                {% else %}
+                                <input type="checkbox" disabled class="rounded border-outline-variant text-outline w-4 h-4 cursor-not-allowed opacity-30" title="Bloqueado: tiene vistas analíticas asignadas">
+                                {% endif %}
+                            </td>
+                            <td class="py-3.5 px-4 font-mono font-bold text-on-surface-variant">{{ c.idCubo }}</td>
+                            <td class="py-3.5 px-4">
+                                <div class="flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-primary text-base">view_in_ar</span>
+                                    <span class="font-bold text-on-surface">{{ c.nombreCubo }}</span>
+                                </div>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                <span class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-surface-container text-on-surface-variant border border-outline-variant/40">
+                                    {{ c.tipoOrigen }}
+                                </span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                {% if c.totalVistasAsignadas > 0 %}
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200" title="Debes eliminar sus vistas asignadas para poder eliminar este cubo">
+                                    <span class="material-symbols-outlined text-xs text-amber-600">lock</span>
+                                    <span>{{ c.totalVistasAsignadas }} vista(s) activa(s)</span>
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-800 border border-emerald-200">
+                                    <span class="material-symbols-outlined text-xs text-emerald-600">check_circle</span>
+                                    <span>0 vistas (Eliminable)</span>
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3.5 px-4 font-mono text-[11px] text-on-surface-variant truncate max-w-[200px]" title="{{ c.archivoParquet }}">
+                                {{ c.archivoParquet or '-' }}
+                            </td>
+                            <td class="py-3.5 px-4 text-right">
+                                {% if c.puedeEliminar %}
+                                <button type="button" onclick="confirmarEliminacionIndividual('cubo', {{ c.idCubo }}, '{{ c.nombreCubo }}')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-error bg-error/10 hover:bg-error/20 transition-colors cursor-pointer" title="Eliminar cubo permanentemente">
+                                    <span class="material-symbols-outlined text-sm">delete</span>
+                                    Eliminar
+                                </button>
+                                {% else %}
+                                <button type="button" disabled class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-outline bg-surface-container cursor-not-allowed opacity-50" title="No se puede eliminar: tiene vistas analíticas asociadas">
+                                    <span class="material-symbols-outlined text-sm">lock</span>
+                                    Bloqueado
+                                </button>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="7" class="py-12 text-center text-outline">
+                                <span class="material-symbols-outlined text-4xl mb-2">database_off</span>
+                                <p class="text-sm font-bold">No hay cubos OBT registrados en el sistema.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- PANEL 2: VISTAS ANALÍTICAS                                            -->
+    <!-- ===================================================================== -->
+    <div id="panelVistas" class="space-y-4 hidden">
+        <!-- Barra de Búsqueda y Acciones en Lote de Vistas -->
+        <div class="bg-white p-4 rounded-2xl border border-outline-variant/60 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-3 flex-1 max-w-md">
+                <div class="relative w-full">
+                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-outline text-lg">search</span>
+                    <input type="text" id="filtroVistas" oninput="filtrarTablaVistas()" placeholder="Buscar vista por nombre, código o cubo..." class="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-outline-variant/80 bg-surface-container-low focus:bg-white focus:border-primary focus:outline-hidden transition-all">
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <button type="button" id="btnEliminarLoteVistas" onclick="abrirModalEliminarLote('vistas')" disabled class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-error/10 text-error cursor-not-allowed opacity-50">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                    <span>Eliminar Seleccionadas</span>
+                    <span id="badgeSeleccionadosVistas" class="px-1.5 py-0.5 rounded-md text-[10px] bg-error text-white font-black hidden">0</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tabla de Vistas Analíticas -->
+        <div class="bg-white rounded-2xl border border-outline-variant/60 shadow-xs overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="tablaVistas">
+                    <thead>
+                        <tr class="border-b border-outline-variant/40 bg-surface-container-low text-[11px] font-black tracking-wider text-on-surface-variant uppercase">
+                            <th class="py-3.5 px-4 w-12 text-center">
+                                <input type="checkbox" id="checkTodosVistas" onchange="alternarSeleccionTodos('vistas', this.checked)" class="rounded border-outline-variant text-primary focus:ring-primary w-4 h-4 cursor-pointer" title="Seleccionar todas las vistas">
+                            </th>
+                            <th class="py-3.5 px-4 w-16">ID</th>
+                            <th class="py-3.5 px-4">Nombre de la Vista</th>
+                            <th class="py-3.5 px-4">Código</th>
+                            <th class="py-3.5 px-4">Cubo Asociado</th>
+                            <th class="py-3.5 px-4">Estado</th>
+                            <th class="py-3.5 px-4">Fecha Creación</th>
+                            <th class="py-3.5 px-4 text-right">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-outline-variant/20 text-xs">
+                        {% for v in vistas %}
+                        <tr class="hover:bg-surface-container-low/40 transition-colors fila-vista" data-nombre="{{ v.nombreVista|lower }}" data-codigo="{{ v.codigoVista|lower }}" data-cubo="{{ v.nombreCubo|lower }}" id="fila-vista-{{ v.idVista }}">
+                            <td class="py-3.5 px-4 text-center">
+                                <input type="checkbox" class="cb-vista rounded border-outline-variant text-primary focus:ring-primary w-4 h-4 cursor-pointer" value="{{ v.idVista }}" data-nombre="{{ v.nombreVista }}" onchange="actualizarEstadoSeleccion('vistas')">
+                            </td>
+                            <td class="py-3.5 px-4 font-mono font-bold text-on-surface-variant">{{ v.idVista }}</td>
+                            <td class="py-3.5 px-4">
+                                <div class="flex items-center gap-2">
+                                    <span class="material-symbols-outlined text-secondary text-base">table_view</span>
+                                    <span class="font-bold text-on-surface">{{ v.nombreVista }}</span>
+                                </div>
+                            </td>
+                            <td class="py-3.5 px-4 font-mono text-[11px] text-on-surface-variant">{{ v.codigoVista }}</td>
+                            <td class="py-3.5 px-4">
+                                <span class="px-2.5 py-1 rounded-lg text-[11px] font-bold bg-primary/10 text-primary border border-primary/20">
+                                    {{ v.nombreCubo }}
+                                </span>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                {% if v.estadoHabilitado %}
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-emerald-600"></span> Activa
+                                </span>
+                                {% else %}
+                                <span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-700">
+                                    <span class="w-1.5 h-1.5 rounded-full bg-slate-400"></span> Inactiva
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3.5 px-4 text-on-surface-variant font-mono text-[11px]">{{ v.fechaCreacion }}</td>
+                            <td class="py-3.5 px-4 text-right">
+                                <button type="button" onclick="confirmarEliminacionIndividual('vista', {{ v.idVista }}, '{{ v.nombreVista }}')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-error bg-error/10 hover:bg-error/20 transition-colors cursor-pointer" title="Eliminar vista analítica">
+                                    <span class="material-symbols-outlined text-sm">delete</span>
+                                    Eliminar
+                                </button>
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr>
+                            <td colspan="8" class="py-12 text-center text-outline">
+                                <span class="material-symbols-outlined text-4xl mb-2">view_compact_alt</span>
+                                <p class="text-sm font-bold">No hay vistas analíticas registradas.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- ===================================================================== -->
+    <!-- PANEL 3: AUDITORÍA DE ELIMINACIONES                                   -->
+    <!-- ===================================================================== -->
+    <div id="panelAuditoria" class="space-y-4 hidden">
+        <!-- Encabezado y Refresco de Auditoría -->
+        <div class="bg-white p-4 rounded-2xl border border-outline-variant/60 shadow-xs flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div class="flex items-center gap-3 flex-1 max-w-md">
+                <div class="relative w-full">
+                    <span class="material-symbols-outlined absolute left-3 top-2.5 text-outline text-lg">search</span>
+                    <input type="text" id="filtroAuditoria" oninput="filtrarTablaAuditoria()" placeholder="Filtrar por usuario, objeto o fecha..." class="w-full pl-9 pr-3 py-2 text-xs rounded-xl border border-outline-variant/80 bg-surface-container-low focus:bg-white focus:border-primary focus:outline-hidden transition-all">
+                </div>
+            </div>
+            <div class="flex items-center gap-3">
+                <button type="button" onclick="recargarAuditoria()" class="px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 bg-surface-container hover:bg-surface-container-high text-on-surface cursor-pointer">
+                    <span class="material-symbols-outlined text-base">refresh</span>
+                    <span>Actualizar Auditoría</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Tabla de Auditoría -->
+        <div class="bg-white rounded-2xl border border-outline-variant/60 shadow-xs overflow-hidden">
+            <div class="overflow-x-auto">
+                <table class="w-full text-left border-collapse" id="tablaAuditoria">
+                    <thead>
+                        <tr class="border-b border-outline-variant/40 bg-surface-container-low text-[11px] font-black tracking-wider text-on-surface-variant uppercase">
+                            <th class="py-3.5 px-4 w-16">ID Log</th>
+                            <th class="py-3.5 px-4">Fecha y Hora</th>
+                            <th class="py-3.5 px-4">Usuario Responsable</th>
+                            <th class="py-3.5 px-4">Tipo Objeto</th>
+                            <th class="py-3.5 px-4">Nombre del Objeto</th>
+                            <th class="py-3.5 px-4">Identificador</th>
+                            <th class="py-3.5 px-4">Dirección IP</th>
+                            <th class="py-3.5 px-4 text-center">Detalles</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-outline-variant/20 text-xs" id="tbodyAuditoria">
+                        {% for a in auditoria %}
+                        <tr class="hover:bg-surface-container-low/40 transition-colors fila-auditoria" data-filtro="{{ (a.nombreUsuario ~ ' ' ~ a.nombreCompleto ~ ' ' ~ a.nombreObjeto ~ ' ' ~ a.tipoObjeto ~ ' ' ~ a.fechaHora)|lower }}">
+                            <td class="py-3.5 px-4 font-mono font-bold text-on-surface-variant">{{ a.idLog }}</td>
+                            <td class="py-3.5 px-4 font-mono text-[11px] font-bold text-on-surface">{{ a.fechaHora }}</td>
+                            <td class="py-3.5 px-4">
+                                <div class="flex flex-col">
+                                    <span class="font-bold text-on-surface">{{ a.nombreCompleto or a.nombreUsuario }}</span>
+                                    <span class="text-[10px] text-on-surface-variant font-mono">@{{ a.nombreUsuario }}</span>
+                                </div>
+                            </td>
+                            <td class="py-3.5 px-4">
+                                {% if a.tipoObjeto == 'CUBO' %}
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">
+                                    CUBO OBT
+                                </span>
+                                {% else %}
+                                <span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">
+                                    VISTA ANALÍTICA
+                                </span>
+                                {% endif %}
+                            </td>
+                            <td class="py-3.5 px-4 font-bold text-on-surface">{{ a.nombreObjeto }}</td>
+                            <td class="py-3.5 px-4 font-mono text-[11px] text-on-surface-variant">{{ a.identificadorObjeto or ('ID: ' ~ a.idObjeto) }}</td>
+                            <td class="py-3.5 px-4 font-mono text-[11px] text-on-surface-variant">{{ a.direccionIp or '127.0.0.1' }}</td>
+                            <td class="py-3.5 px-4 text-center">
+                                {% if a.detalles %}
+                                <button type="button" onclick='mostrarModalDetallesAuditoria({{ a.detalles|tojson }})' class="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors cursor-pointer" title="Ver metadatos registrados">
+                                    <span class="material-symbols-outlined text-base">info</span>
+                                </button>
+                                {% else %}
+                                <span class="text-outline text-xs">-</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                        {% else %}
+                        <tr id="filaSinAuditoria">
+                            <td colspan="8" class="py-12 text-center text-outline">
+                                <span class="material-symbols-outlined text-4xl mb-2">history_toggle_off</span>
+                                <p class="text-sm font-bold">No hay registros de eliminación en el log de auditoría.</p>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- ========================================================================= -->
+<!-- MODAL DE CONFIRMACIÓN DE ELIMINACIÓN                                       -->
+<!-- ========================================================================= -->
+<div id="modalConfirmacionEliminar" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-error/20 flex flex-col gap-4 animate-in fade-in duration-200">
+        
+        <div class="flex items-center gap-3 border-b border-outline-variant/40 pb-3">
+            <div class="w-10 h-10 rounded-2xl bg-error/10 text-error flex items-center justify-center shrink-0">
+                <span class="material-symbols-outlined text-2xl">warning</span>
+            </div>
+            <div>
+                <h3 class="font-display font-black text-base text-primary">Confirmar Eliminación</h3>
+                <p class="text-[11px] text-on-surface-variant font-medium">Operación destructiva con auditoría inmutable</p>
+            </div>
+        </div>
+
+        <div class="space-y-3">
+            <p class="text-xs text-on-surface leading-relaxed" id="textoModalConfirmacion">
+                ¿Estás seguro de que deseas eliminar permanentemente este elemento?
+            </p>
+
+            <div class="p-3 bg-surface-container-low rounded-xl border border-outline-variant/50 max-h-36 overflow-y-auto" id="contenedorListaObjetosEliminar">
+                <!-- Se inyecta dinámicamente el listado de elementos a eliminar -->
+            </div>
+
+            <div class="p-3 bg-amber-50 rounded-xl border border-amber-200 text-amber-900 text-[11px] flex items-start gap-2">
+                <span class="material-symbols-outlined text-sm text-amber-700 shrink-0 mt-0.5">policy</span>
+                <span>
+                    <strong>Registro de Auditoría:</strong> Tu nombre de usuario (<span class="font-mono font-bold">{{ user.nombreUsuario }}</span>), la fecha, hora y detalles de los objetos eliminados quedarán guardados permanentemente en la base de datos.
+                </span>
+            </div>
+        </div>
+
+        <div class="flex items-center justify-end gap-2 border-t border-outline-variant/40 pt-3">
+            <button type="button" onclick="cerrarModalConfirmacion()" class="px-4 py-2 rounded-xl text-xs font-bold text-on-surface-variant hover:bg-surface-container transition-colors cursor-pointer">
+                Cancelar
+            </button>
+            <button type="button" id="btnEjecutarEliminacionConfirmada" onclick="ejecutarEliminacion()" class="px-5 py-2 rounded-xl text-xs font-bold text-white bg-error hover:bg-red-700 shadow-md shadow-error/20 transition-all flex items-center gap-2 cursor-pointer">
+                <span class="material-symbols-outlined text-sm">delete_forever</span>
+                <span id="labelBtnEjecutarEliminacion">Sí, Eliminar Definitivamente</span>
+            </button>
+        </div>
+
+    </div>
+</div>
+
+<!-- ========================================================================= -->
+<!-- MODAL DE METADATOS / DETALLES DE AUDITORÍA                                 -->
+<!-- ========================================================================= -->
+<div id="modalDetallesAuditoria" class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-lg w-full p-6 shadow-2xl border border-outline-variant/60 flex flex-col gap-4">
+        <div class="flex items-center justify-between border-b border-outline-variant/40 pb-3">
+            <h3 class="font-display font-black text-sm text-primary flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-base">info</span>
+                Detalles Registrados en Auditoría
+            </h3>
+            <button type="button" onclick="cerrarModalDetallesAuditoria()" class="p-1 rounded-lg text-outline hover:text-on-surface cursor-pointer">
+                <span class="material-symbols-outlined text-base">close</span>
+            </button>
+        </div>
+        <div class="bg-surface-container-lowest p-4 rounded-xl border border-outline-variant/40 overflow-x-auto max-h-64">
+            <pre class="font-mono text-xs text-on-surface whitespace-pre-wrap" id="contenidoJsonAuditoria"></pre>
+        </div>
+        <div class="flex justify-end">
+            <button type="button" onclick="cerrarModalDetallesAuditoria()" class="px-4 py-2 rounded-xl text-xs font-bold bg-surface-container hover:bg-surface-container-high text-on-surface cursor-pointer">
+                Cerrar
+            </button>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Estado de la pantalla
+    let operacionPendiente = null; // { tipo: 'cubo'|'vista'|'cubos_lote'|'vistas_lote', ids: [...], nombres: [...] }
+
+    // Control de pestañas
+    function cambiarPestana(pestana) {
+        const paneles = {
+            'cubos': document.getElementById('panelCubos'),
+            'vistas': document.getElementById('panelVistas'),
+            'auditoria': document.getElementById('panelAuditoria')
+        };
+        const botones = {
+            'cubos': document.getElementById('btnTabCubos'),
+            'vistas': document.getElementById('btnTabVistas'),
+            'auditoria': document.getElementById('btnTabAuditoria')
+        };
+
+        Object.keys(paneles).forEach(k => {
+            if (k === pestana) {
+                paneles[k].classList.remove('hidden');
+                botones[k].classList.add('bg-white', 'text-primary', 'shadow-xs');
+                botones[k].classList.remove('text-on-surface-variant');
+            } else {
+                paneles[k].classList.add('hidden');
+                botones[k].classList.remove('bg-white', 'text-primary', 'shadow-xs');
+                botones[k].classList.add('text-on-surface-variant');
+            }
+        });
+    }
+
+    // Filtrado de tablas
+    function filtrarTablaCubos() {
+        const query = document.getElementById('filtroCubos').value.toLowerCase().trim();
+        const filas = document.querySelectorAll('#tablaCubos .fila-cubo');
+        filas.forEach(f => {
+            const nom = f.getAttribute('data-nombre') || '';
+            const ori = f.getAttribute('data-origen') || '';
+            if (nom.includes(query) || ori.includes(query)) {
+                f.style.display = '';
+            } else {
+                f.style.display = 'none';
+            }
+        });
+    }
+
+    function filtrarTablaVistas() {
+        const query = document.getElementById('filtroVistas').value.toLowerCase().trim();
+        const filas = document.querySelectorAll('#tablaVistas .fila-vista');
+        filas.forEach(f => {
+            const nom = f.getAttribute('data-nombre') || '';
+            const cod = f.getAttribute('data-codigo') || '';
+            const cub = f.getAttribute('data-cubo') || '';
+            if (nom.includes(query) || cod.includes(query) || cub.includes(query)) {
+                f.style.display = '';
+            } else {
+                f.style.display = 'none';
+            }
+        });
+    }
+
+    function filtrarTablaAuditoria() {
+        const query = document.getElementById('filtroAuditoria').value.toLowerCase().trim();
+        const filas = document.querySelectorAll('#tablaAuditoria .fila-auditoria');
+        filas.forEach(f => {
+            const texto = f.getAttribute('data-filtro') || '';
+            if (texto.includes(query)) {
+                f.style.display = '';
+            } else {
+                f.style.display = 'none';
+            }
+        });
+    }
+
+    // Gestión de Selección de Checkboxes
+    function alternarSeleccionTodos(tipo, estado) {
+        const checkboxes = document.querySelectorAll(tipo === 'cubos' ? '.cb-cubo' : '.cb-vista');
+        checkboxes.forEach(cb => {
+            if (!cb.disabled) {
+                cb.checked = estado;
+            }
+        });
+        actualizarEstadoSeleccion(tipo);
+    }
+
+    function actualizarEstadoSeleccion(tipo) {
+        const selector = tipo === 'cubos' ? '.cb-cubo:checked' : '.cb-vista:checked';
+        const seleccionados = document.querySelectorAll(selector);
+        const cant = seleccionados.length;
+
+        const btnLote = document.getElementById(tipo === 'cubos' ? 'btnEliminarLoteCubos' : 'btnEliminarLoteVistas');
+        const badgeLote = document.getElementById(tipo === 'cubos' ? 'badgeSeleccionadosCubos' : 'badgeSeleccionadosVistas');
+
+        if (cant > 0) {
+            btnLote.removeAttribute('disabled');
+            btnLote.classList.remove('opacity-50', 'cursor-not-allowed');
+            btnLote.classList.add('bg-error', 'text-white', 'hover:bg-red-700', 'shadow-xs', 'cursor-pointer');
+            badgeLote.textContent = cant;
+            badgeLote.classList.remove('hidden');
+        } else {
+            btnLote.setAttribute('disabled', 'true');
+            btnLote.classList.add('opacity-50', 'cursor-not-allowed');
+            btnLote.classList.remove('bg-error', 'text-white', 'hover:bg-red-700', 'shadow-xs', 'cursor-pointer');
+            badgeLote.classList.add('hidden');
+        }
+    }
+
+    // Modal de Confirmación
+    function confirmarEliminacionIndividual(tipo, id, nombre) {
+        operacionPendiente = {
+            tipo: tipo,
+            ids: [id],
+            nombres: [nombre]
+        };
+
+        const textoModal = document.getElementById('textoModalConfirmacion');
+        const contLista = document.getElementById('contenedorListaObjetosEliminar');
+
+        if (tipo === 'cubo') {
+            textoModal.innerHTML = `¿Confirmas la eliminación definitiva del <strong>Cubo OBT</strong>? Esta acción removerá el archivo Parquet físico y su registro en base de datos.`;
+        } else {
+            textoModal.innerHTML = `¿Confirmas la eliminación definitiva de la <strong>Vista Analítica</strong>? Se removerán sus reglas de formato, roles asociados y granularidad configurada.`;
+        }
+
+        contLista.innerHTML = `
+            <div class="flex items-center gap-2 py-1 text-xs font-bold text-on-surface">
+                <span class="material-symbols-outlined text-error text-base">delete</span>
+                <span>[ID: ${id}] ${nombre}</span>
+            </div>
+        `;
+
+        document.getElementById('modalConfirmacionEliminar').classList.remove('hidden');
+        document.getElementById('modalConfirmacionEliminar').classList.add('flex');
+    }
+
+    function abrirModalEliminarLote(tipo) {
+        const selector = tipo === 'cubos' ? '.cb-cubo:checked' : '.cb-vista:checked';
+        const seleccionados = Array.from(document.querySelectorAll(selector));
+
+        if (seleccionados.length === 0) return;
+
+        const ids = seleccionados.map(cb => parseInt(cb.value));
+        const nombres = seleccionados.map(cb => cb.getAttribute('data-nombre') || `ID ${cb.value}`);
+
+        operacionPendiente = {
+            tipo: tipo === 'cubos' ? 'cubos_lote' : 'vistas_lote',
+            ids: ids,
+            nombres: nombres
+        };
+
+        const textoModal = document.getElementById('textoModalConfirmacion');
+        const contLista = document.getElementById('contenedorListaObjetosEliminar');
+
+        textoModal.innerHTML = `Se eliminarán permanentemente <strong class="text-error">${ids.length}</strong> ${tipo === 'cubos' ? 'cubos OBT' : 'vistas analíticas'} seleccionados.`;
+
+        let htmlItems = '';
+        nombres.forEach((nom, idx) => {
+            htmlItems += `
+                <div class="flex items-center gap-2 py-1 text-xs text-on-surface border-b border-outline-variant/20 last:border-0">
+                    <span class="material-symbols-outlined text-outline text-sm">remove</span>
+                    <span class="font-medium">${nom}</span>
+                </div>
+            `;
+        });
+        contLista.innerHTML = htmlItems;
+
+        document.getElementById('modalConfirmacionEliminar').classList.remove('hidden');
+        document.getElementById('modalConfirmacionEliminar').classList.add('flex');
+    }
+
+    function cerrarModalConfirmacion() {
+        operacionPendiente = null;
+        const modal = document.getElementById('modalConfirmacionEliminar');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    // Ejecución de la Eliminación (Individual o Lote)
+    async function ejecutarEliminacion() {
+        if (!operacionPendiente) return;
+
+        const btnEjecutar = document.getElementById('btnEjecutarEliminacionConfirmada');
+        const labelOriginal = btnEjecutar.innerHTML;
+        btnEjecutar.disabled = true;
+        btnEjecutar.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">progress_activity</span> Eliminando...`;
+
+        try {
+            let res;
+            if (operacionPendiente.tipo === 'cubo') {
+                const idCubo = operacionPendiente.ids[0];
+                res = await fetch(`/api/administracion/cubos/${idCubo}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            } else if (operacionPendiente.tipo === 'vista') {
+                const idVista = operacionPendiente.ids[0];
+                res = await fetch(`/api/administracion/vistas/${idVista}`, {
+                    method: 'DELETE',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            } else if (operacionPendiente.tipo === 'cubos_lote') {
+                res = await fetch('/api/administracion/eliminacion/lote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'cubos', ids: operacionPendiente.ids })
+                });
+            } else if (operacionPendiente.tipo === 'vistas_lote') {
+                res = await fetch('/api/administracion/eliminacion/lote', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ tipo: 'vistas', ids: operacionPendiente.ids })
+                });
+            }
+
+            const data = await res.json();
+
+            if (res.ok && data.exito) {
+                cerrarModalConfirmacion();
+                if (typeof mostrarNotificacionGlobal === 'function') {
+                    mostrarNotificacionGlobal(data.mensaje || 'Eliminación completada con éxito.', 'success');
+                } else {
+                    alert(data.mensaje || 'Eliminación completada con éxito.');
+                }
+                // Recargar la página para reflejar el nuevo estado y auditoría
+                window.location.reload();
+            } else {
+                alert('Error al eliminar: ' + (data.error || data.mensaje || 'Operación rechazada.'));
+            }
+        } catch (err) {
+            console.error(err);
+            alert('Error de conexión o fallo al ejecutar la eliminación: ' + err.message);
+        } finally {
+            btnEjecutar.disabled = false;
+            btnEjecutar.innerHTML = labelOriginal;
+        }
+    }
+
+    // Modal de Detalles de Auditoría
+    function mostrarModalDetallesAuditoria(detalles) {
+        document.getElementById('contenidoJsonAuditoria').textContent = JSON.stringify(detalles, null, 2);
+        const modal = document.getElementById('modalDetallesAuditoria');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function cerrarModalDetallesAuditoria() {
+        const modal = document.getElementById('modalDetallesAuditoria');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    // Recargar auditoría vía API asíncrona
+    async function recargarAuditoria() {
+        try {
+            const res = await fetch('/api/administracion/eliminacion/auditoria?limite=100');
+            const data = await res.json();
+            if (data.exito) {
+                const tbody = document.getElementById('tbodyAuditoria');
+                if (data.auditoria.length === 0) {
+                    tbody.innerHTML = `
+                        <tr>
+                            <td colspan="8" class="py-12 text-center text-outline">
+                                <span class="material-symbols-outlined text-4xl mb-2">history_toggle_off</span>
+                                <p class="text-sm font-bold">No hay registros de eliminación en el log de auditoría.</p>
+                            </td>
+                        </tr>
+                    `;
+                } else {
+                    let html = '';
+                    data.auditoria.forEach(a => {
+                        const badgeTipo = a.tipoObjeto === 'CUBO' 
+                            ? `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-purple-100 text-purple-800 border border-purple-200">CUBO OBT</span>`
+                            : `<span class="px-2.5 py-1 rounded-full text-[10px] font-black bg-blue-100 text-blue-800 border border-blue-200">VISTA ANALÍTICA</span>`;
+                        
+                        const jsonSafe = a.detalles ? JSON.stringify(a.detalles).replace(/'/g, "&#39;") : null;
+                        const btnDetalle = jsonSafe 
+                            ? `<button type="button" onclick='mostrarModalDetallesAuditoria(${jsonSafe})' class="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-colors cursor-pointer" title="Ver metadatos registrados"><span class="material-symbols-outlined text-base">info</span></button>`
+                            : `<span class="text-outline text-xs">-</span>`;
+
+                        html += `
+                            <tr class="hover:bg-surface-container-low/40 transition-colors fila-auditoria" data-filtro="${((a.nombreUsuario||'') + ' ' + (a.nombreCompleto||'') + ' ' + (a.nombreObjeto||'') + ' ' + (a.tipoObjeto||'') + ' ' + (a.fechaHora||'')).toLowerCase()}">
+                                <td class="py-3.5 px-4 font-mono font-bold text-on-surface-variant">${a.idLog}</td>
+                                <td class="py-3.5 px-4 font-mono text-[11px] font-bold text-on-surface">${a.fechaHora}</td>
+                                <td class="py-3.5 px-4">
+                                    <div class="flex flex-col">
+                                        <span class="font-bold text-on-surface">${a.nombreCompleto || a.nombreUsuario}</span>
+                                        <span class="text-[10px] text-on-surface-variant font-mono">@${a.nombreUsuario}</span>
+                                    </div>
+                                </td>
+                                <td class="py-3.5 px-4">${badgeTipo}</td>
+                                <td class="py-3.5 px-4 font-bold text-on-surface">${a.nombreObjeto}</td>
+                                <td class="py-3.5 px-4 font-mono text-[11px] text-on-surface-variant">${a.identificadorObjeto || ('ID: ' + a.idObjeto)}</td>
+                                <td class="py-3.5 px-4 font-mono text-[11px] text-on-surface-variant">${a.direccionIp || '127.0.0.1'}</td>
+                                <td class="py-3.5 px-4 text-center">${btnDetalle}</td>
+                            </tr>
+                        `;
+                    });
+                    tbody.innerHTML = html;
+                }
+                document.getElementById('badgeContadorAuditoria').textContent = data.auditoria.length;
+            }
+        } catch (err) {
+            console.error('Error al recargar auditoría:', err);
+        }
+    }
+</script>
+{% endblock %}

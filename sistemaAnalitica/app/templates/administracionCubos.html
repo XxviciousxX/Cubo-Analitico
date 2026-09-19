@@ -1,0 +1,1279 @@
+{% extends "base.html" %}
+
+{% block title %}Administración de Cubos | Sistema Analítico{% endblock %}
+{% block page_title %}Administración de Cubos{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+
+    <!-- Encabezado y Estadísticas Rápidas -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h2 class="font-display text-2xl font-black text-primary tracking-tight">Gobernanza y Ciclo de Vida de Cubos</h2>
+            <p class="text-xs text-on-surface-variant font-medium mt-1">
+                Monitorea el estado físico de los archivos Parquet OBT, refresca datos según origen y audita el impacto de cambios semánticos.
+            </p>
+        </div>
+        <div class="flex items-center gap-3">
+            <a href="/ingesta" class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold text-white btn-glow">
+                <span class="material-symbols-outlined text-base">add_circle</span>
+                Nuevo Cubo en Ingesta
+            </a>
+        </div>
+    </div>
+
+    <!-- Tarjetas de Métricas -->
+    <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div class="glass-card rounded-2xl p-5 financial-card">
+            <div class="flex items-center justify-between">
+                <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Total Cubos OBT</p>
+                <span class="material-symbols-outlined text-primary text-xl">dataset</span>
+            </div>
+            <p class="text-2xl font-black font-display text-primary mt-2">{{ cubos|length }}</p>
+            <p class="text-[11px] text-outline mt-1 font-medium">Almacenamiento columnar Parquet</p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 financial-card">
+            <div class="flex items-center justify-between">
+                <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Cubos Habilitados</p>
+                <span class="material-symbols-outlined text-secondary text-xl">check_circle</span>
+            </div>
+            {% set habilitados = cubos|selectattr("estadoHabilitado")|list|length %}
+            <p class="text-2xl font-black font-display text-secondary mt-2">{{ habilitados }}</p>
+            <p class="text-[11px] text-outline mt-1 font-medium">Listos para consulta y exploración</p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 financial-card">
+            <div class="flex items-center justify-between">
+                <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Cubos Inactivos</p>
+                <span class="material-symbols-outlined text-error text-xl">pause_circle</span>
+            </div>
+            <p class="text-2xl font-black font-display text-error mt-2">{{ (cubos|length) - habilitados }}</p>
+            <p class="text-[11px] text-outline mt-1 font-medium">Consultas bloqueadas por política</p>
+        </div>
+
+        <div class="glass-card rounded-2xl p-5 financial-card">
+            <div class="flex items-center justify-between">
+                <p class="text-xs font-bold text-on-surface-variant uppercase tracking-wider">Vistas Dependientes</p>
+                <span class="material-symbols-outlined text-primary-container text-xl">monitoring</span>
+            </div>
+            {% set totalVistas = cubos|map(attribute="totalVistas")|sum %}
+            <p class="text-2xl font-black font-display text-primary-container mt-2">{{ totalVistas }}</p>
+            <p class="text-[11px] text-outline mt-1 font-medium">Modelos analíticos vinculados</p>
+        </div>
+    </div>
+
+    <!-- Catálogo Tabular de Cubos -->
+    <div class="glass-card rounded-2xl overflow-hidden shadow-sm">
+        <div class="px-6 py-4 border-b border-outline-variant/40 flex items-center justify-between bg-white/50">
+            <h3 class="font-display text-sm font-bold text-primary flex items-center gap-2">
+                <span class="material-symbols-outlined text-base">table_chart</span>
+                Catálogo de Almacenamiento Parquet
+            </h3>
+            <span class="text-xs text-on-surface-variant font-medium">Actualización en tiempo real</span>
+        </div>
+
+        <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs">
+                <thead class="bg-surface-container-low/70 text-on-surface-variant font-bold uppercase tracking-wider border-b border-outline-variant/40">
+                    <tr>
+                        <th class="py-3.5 px-6">Cubo / Archivo Parquet</th>
+                        <th class="py-3.5 px-4">Origen de Datos</th>
+                        <th class="py-3.5 px-4">Última Carga</th>
+                        <th class="py-3.5 px-4 text-center">Vistas Vinculadas</th>
+                        <th class="py-3.5 px-4 text-center">Estado</th>
+                        <th class="py-3.5 px-6 text-right">Acciones de Gestión</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-outline-variant/30">
+                    {% for c in cubos %}
+                    <tr class="hover:bg-white/60 transition-colors" id="fila-cubo-{{ c.idCubo }}">
+                        <td class="py-4 px-6">
+                            <div class="flex items-center gap-3">
+                                <div class="w-9 h-9 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                                    <span class="material-symbols-outlined text-lg">folder_data</span>
+                                </div>
+                                <div>
+                                    <p class="font-bold text-on-surface text-sm">{{ c.nombreCubo }}</p>
+                                    <p class="text-[11px] text-outline font-mono truncate max-w-xs" title="{{ c.archivoParquet }}">
+                                        {{ c.nombreArchivo }}
+                                    </p>
+                                </div>
+                            </div>
+                        </td>
+                        <td class="py-4 px-4">
+                            {% if 'EXCEL' in c.tipoOrigen %}
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                                    <span class="material-symbols-outlined text-xs">table_view</span> Excel Calamine
+                                </span>
+                            {% elif 'SQL' in c.tipoOrigen %}
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                                    <span class="material-symbols-outlined text-xs">database</span> SQL en Vivo
+                                </span>
+                            {% elif 'COMPUESTO' in c.tipoOrigen %}
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-purple-50 text-purple-700 border border-purple-200">
+                                    <span class="material-symbols-outlined text-xs">join</span> Cubo Compuesto
+                                </span>
+                            {% else %}
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-700 border border-amber-200">
+                                    <span class="material-symbols-outlined text-xs">cloud_download</span> Data Lake ETL
+                                </span>
+                            {% endif %}
+                        </td>
+                        <td class="py-4 px-4 font-mono text-xs text-on-surface-variant">
+                            {{ c.fechaUltimaCarga }}
+                        </td>
+                        <td class="py-4 px-4 text-center">
+                            <span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-lg text-xs font-bold {% if c.vistasActivas > 0 %}bg-primary/10 text-primary border border-primary/20{% else %}bg-surface-container text-outline{% endif %}">
+                                {{ c.vistasActivas }} activa(s) / {{ c.totalVistas }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-4 text-center">
+                            <label class="relative inline-flex items-center cursor-pointer">
+                                <input type="checkbox" class="sr-only peer" id="toggle-cubo-{{ c.idCubo }}" {% if c.estadoHabilitado %}checked{% endif %} onchange="conmutarEstadoCubo({{ c.idCubo }}, this.checked)">
+                                <div class="w-10 h-5 bg-outline-variant peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-secondary"></div>
+                            </label>
+                            <span class="block text-[10px] font-bold text-outline mt-0.5" id="label-estado-{{ c.idCubo }}">
+                                {{ 'Activo' if c.estadoHabilitado else 'Inactivo' }}
+                            </span>
+                        </td>
+                        <td class="py-4 px-6 text-right">
+                            <div class="flex items-center justify-end gap-2">
+                                {% if 'SQL' in c.tipoOrigen %}
+                                <button type="button" onclick="abrirModalEditarSql({{ c.idCubo }}, '{{ c.nombreCubo }}')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors" title="Modificar sentencia SQL o procedimiento almacenado">
+                                    <span class="material-symbols-outlined text-sm">code</span>
+                                    Modificar SQL
+                                </button>
+                                {% endif %}
+
+                                {% if 'PROCESO_MASIVO' in c.tipoOrigen or 'DATA_LAKE' in c.tipoOrigen %}
+                                <span class="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px] font-bold text-amber-800 bg-amber-50 border border-amber-200" title="Alimentado externamente por ETL masiva (sin recarga manual)">
+                                    <span class="material-symbols-outlined text-xs">cloud_sync</span> ETL Externa
+                                </span>
+                                <button type="button" onclick="abrirModalColumnas({{ c.idCubo }}, '{{ c.nombreCubo }}', {{ c.columnas | tojson }})" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-colors" title="Modificar estructura del cubo (las nuevas columnas se crearán en NULL)">
+                                    <span class="material-symbols-outlined text-sm">schema</span>
+                                    Modificar Estructura
+                                </button>
+                                {% else %}
+                                <button type="button" onclick="abrirModalColumnas({{ c.idCubo }}, '{{ c.nombreCubo }}', {{ c.columnas | tojson }})" class="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-xs font-bold text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors" title="Modificar estructura y columnas">
+                                    <span class="material-symbols-outlined text-sm">tune</span>
+                                </button>
+                                <button type="button" onclick="abrirModalActualizar({{ c.idCubo }}, '{{ c.nombreCubo }}', '{{ c.tipoOrigen }}')" class="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-colors" title="Refrescar o recargar datos del archivo Parquet">
+                                    <span class="material-symbols-outlined text-sm">sync</span>
+                                    Actualizar
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="6" class="py-12 text-center text-outline">
+                            <span class="material-symbols-outlined text-4xl text-outline mb-2">database_off</span>
+                            <p class="text-sm font-bold">No hay cubos OBT registrados en el almacenamiento.</p>
+                            <p class="text-xs text-outline mt-1">Genera un cubo en el módulo de Ingesta para comenzar.</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================== -->
+<!-- MODAL: ACTUALIZAR DATOS DEL CUBO                                           -->
+<!-- ========================================================================== -->
+<div id="modal-actualizar" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-xl w-full p-6 shadow-2xl border border-outline-variant/60 max-h-[90vh] flex flex-col">
+        <div class="flex items-center justify-between border-b border-outline-variant/40 pb-3">
+            <h3 class="font-display font-bold text-base text-primary flex items-center gap-2">
+                <span class="material-symbols-outlined text-lg">sync</span>
+                Refrescar Datos del Cubo
+            </h3>
+            <button type="button" onclick="cerrarModalActualizar()" class="text-outline hover:text-on-surface">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <div class="mt-4 space-y-4 text-xs overflow-y-auto flex-1 pr-1">
+            <div class="p-3 bg-surface-container-low rounded-xl">
+                <p class="text-outline font-medium">Cubo Seleccionado:</p>
+                <p class="font-bold text-primary text-sm mt-0.5" id="modal-cubo-nombre">-</p>
+                <p class="text-[11px] text-outline mt-1">Tipo de Origen: <span class="font-bold text-on-surface" id="modal-cubo-tipo">-</span></p>
+            </div>
+
+            <!-- Formulario dinámico según origen -->
+            <div id="panel-actualizar-excel" class="hidden space-y-3">
+                <p class="text-on-surface font-medium">
+                    Adjunta el nuevo libro Excel. Si contiene hojas idénticas se unificarán automáticamente; si contiene hojas distintas, se solicitarán las relaciones correspondientes.
+                </p>
+                <div class="border-2 border-dashed border-outline-variant rounded-xl p-5 text-center hover:border-primary transition-colors cursor-pointer bg-surface-container-low" onclick="document.getElementById('input-archivo-excel').click()">
+                    <span class="material-symbols-outlined text-3xl text-primary">upload_file</span>
+                    <p class="font-bold text-primary text-xs mt-2" id="texto-archivo-excel">Haz clic para seleccionar el archivo .xlsx</p>
+                    <p class="text-[10px] text-outline mt-1">Inspección de hojas y recreación Parquet con ZSTD</p>
+                    <input type="file" id="input-archivo-excel" accept=".xlsx, .xls" class="hidden" onchange="seleccionarArchivoExcel(this)">
+                </div>
+
+                <!-- Diagnóstico de Hojas del Excel -->
+                <div id="diagnostico-excel-actualizar" class="hidden space-y-2"></div>
+
+                <!-- Panel de Relaciones si se detectan hojas diferentes -->
+                <div id="panel-relaciones-actualizar" class="hidden space-y-3 p-3 bg-purple-50/60 rounded-xl border border-purple-200">
+                    <div class="flex items-center justify-between">
+                        <span class="font-bold text-xs text-purple-950 flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-purple-600 text-sm">hub</span>
+                            Relaciones Requeridas entre Hojas
+                        </span>
+                        <span class="text-[10px] text-purple-700 font-bold" id="conteo-relaciones-actualizar"></span>
+                    </div>
+                    <p class="text-[11px] text-purple-800">
+                        El nuevo libro contiene hojas con columnas diferentes. Confirma las claves de enlace antes de actualizar:
+                    </p>
+                    <div id="lista-relaciones-actualizar" class="space-y-2.5 max-h-52 overflow-y-auto pr-1">
+                        <!-- Inyectado dinámicamente -->
+                    </div>
+                </div>
+            </div>
+
+            <div id="panel-actualizar-sql" class="hidden space-y-2">
+                <p class="text-on-surface font-medium">
+                    El sistema volverá a ejecutar la consulta o procedimiento almacenado SQL configurado contra el motor de origen y regenerará el archivo Parquet.
+                </p>
+                <div class="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-[11px]">
+                    <span class="font-bold">Aviso:</span> Esta acción respetará el control de sobrecarga (Throttling) si fue ejecutada recientemente.
+                </div>
+            </div>
+
+            <div id="panel-actualizar-generico" class="hidden space-y-2">
+                <p class="text-on-surface font-medium">
+                    Se verificará la existencia física del archivo Parquet en el Data Lake y se sincronizarán los metadatos y timestamps con el catálogo relacional.
+                </p>
+            </div>
+
+            <!-- Feedback y Spinner -->
+            <div id="feedback-actualizar" class="hidden p-3 rounded-xl text-xs font-bold"></div>
+        </div>
+
+        <div class="mt-6 flex items-center justify-end gap-3 pt-3 border-t border-outline-variant/40">
+            <button type="button" onclick="cerrarModalActualizar()" class="px-4 py-2 rounded-xl text-xs font-bold text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors">
+                Cancelar
+            </button>
+            <button type="button" id="btn-confirmar-actualizar" onclick="ejecutarActualizacionDatos()" class="px-4 py-2 rounded-xl text-xs font-bold text-white btn-glow flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-sm">refresh</span>
+                Ejecutar Refresco
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================== -->
+<!-- MODAL: MODIFICAR COMANDO SQL DEL CUBO                                      -->
+<!-- ========================================================================== -->
+<div id="modal-editar-sql" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-2xl w-full p-6 shadow-2xl border border-outline-variant/60 flex flex-col max-h-[90vh]">
+        <div class="flex items-center justify-between border-b border-outline-variant/40 pb-3">
+            <h3 class="font-display font-bold text-base text-primary flex items-center gap-2">
+                <span class="material-symbols-outlined text-lg text-blue-600">code</span>
+                Modificar Comando SQL del Cubo
+            </h3>
+            <button type="button" onclick="cerrarModalEditarSql()" class="text-outline hover:text-on-surface">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <div class="mt-4 flex-1 overflow-y-auto space-y-4 text-xs pr-1">
+            <div class="p-3 bg-surface-container-low rounded-xl">
+                <p class="text-outline font-medium">Cubo Seleccionado:</p>
+                <p class="font-bold text-primary text-sm mt-0.5" id="modal-sql-cubo-nombre">-</p>
+                <input type="hidden" id="modal-sql-cubo-id">
+            </div>
+
+            <!-- Selector de Conexión -->
+            <div>
+                <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Conexión de Base de Datos</label>
+                <select id="modal-sql-conexion" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface">
+                    {% if conexiones %}
+                        {% for con in conexiones %}
+                        <option value="{{ con.idConexion }}">{{ con.nombreConexion }} ({{ con.motorBaseDatos }})</option>
+                        {% endfor %}
+                    {% else %}
+                        <option value="">-- Sin conexiones registradas --</option>
+                    {% endif %}
+                </select>
+            </div>
+
+            <!-- Sentencia SQL -->
+            <div>
+                <div class="flex items-center justify-between mb-1">
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider">Sentencia SQL / Procedimiento Almacenado</label>
+                    <span class="text-[11px] text-outline">Modifica o ajusta filtros, campos y proyecciones</span>
+                </div>
+                <textarea id="modal-sql-consulta" rows="6" class="w-full bg-surface-container-low border border-outline-variant rounded-xl p-3 text-xs font-mono text-on-surface focus:border-primary focus:outline-none" placeholder="SELECT ... FROM ..."></textarea>
+            </div>
+
+            <!-- Opciones de saneamiento y refresco -->
+            <div class="p-3 rounded-xl bg-surface-container space-y-2 border border-outline-variant/40">
+                <label class="flex items-center gap-2 cursor-pointer font-bold text-on-surface">
+                    <input type="checkbox" id="modal-sql-remover-top" checked class="rounded border-outline text-primary focus:ring-0">
+                    <span>Remover automáticamente cláusula de muestra (TOP / LIMIT) para extracción completa</span>
+                </label>
+                <p class="text-[11px] text-outline ml-6">
+                    Si tu consulta incluye <code>TOP 100</code> o similar, el sistema lo removerá automáticamente para asegurar que el cubo se refresque con toda la historia de datos.
+                </p>
+
+                <label class="flex items-center gap-2 cursor-pointer font-bold text-secondary pt-1">
+                    <input type="checkbox" id="modal-sql-ejecutar-refresco" checked class="rounded border-outline text-secondary focus:ring-0">
+                    <span>Ejecutar refresco y regenerar Parquet inmediatamente al guardar</span>
+                </label>
+            </div>
+
+            <!-- Botón Probar Consulta y Resultados -->
+            <div>
+                <button type="button" id="btn-probar-sql-modal" onclick="probarSqlModal()" class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-colors">
+                    <span class="material-symbols-outlined text-sm">play_arrow</span> Probar Consulta (Muestra 5 filas)
+                </button>
+                <div id="modal-sql-resultado-prueba" class="hidden mt-2 p-3 rounded-xl bg-surface-container-low border border-outline-variant/60 max-h-40 overflow-x-auto text-[11px]"></div>
+            </div>
+
+            <div id="modal-sql-feedback" class="hidden p-3 rounded-xl text-xs font-bold"></div>
+        </div>
+
+        <div class="mt-4 flex items-center justify-end gap-3 pt-3 border-t border-outline-variant/40">
+            <button type="button" onclick="cerrarModalEditarSql()" class="px-4 py-2 rounded-xl text-xs font-bold text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors">
+                Cancelar
+            </button>
+            <button type="button" id="btn-guardar-sql-cubo" onclick="guardarSqlCubo()" class="px-4 py-2 rounded-xl text-xs font-bold text-white btn-glow flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-sm">save</span>
+                Guardar y Aplicar Cambios
+            </button>
+        </div>
+    </div>
+</div>
+
+<!-- ========================================================================== -->
+<!-- MODAL: MODIFICAR ESTRUCTURA, AGREGAR COLUMNAS Y GOBERNANZA                  -->
+<!-- ========================================================================== -->
+<div id="modal-columnas" class="fixed inset-0 z-50 bg-black/50 backdrop-blur-xs hidden items-center justify-center p-4">
+    <div class="bg-white rounded-2xl max-w-3xl w-full p-6 shadow-2xl border border-outline-variant/60 flex flex-col max-h-[90vh]">
+        <div class="flex items-center justify-between border-b border-outline-variant/40 pb-3">
+            <div>
+                <h3 class="font-display font-bold text-base text-primary flex items-center gap-2">
+                    <span class="material-symbols-outlined text-lg">schema</span>
+                    Modificar Estructura y Columnas del Cubo
+                </h3>
+                <p class="text-[11px] text-on-surface-variant mt-0.5">
+                    Añade nuevas columnas o elimina existentes. Las columnas añadidas se crearán en <b>NULL</b> en el Parquet.
+                </p>
+            </div>
+            <button type="button" onclick="cerrarModalColumnas()" class="text-outline hover:text-on-surface">
+                <span class="material-symbols-outlined text-lg">close</span>
+            </button>
+        </div>
+
+        <div class="mt-4 flex-1 overflow-y-auto space-y-4 text-xs pr-1">
+            <div class="p-3 bg-surface-container-low rounded-xl flex items-center justify-between gap-3">
+                <div>
+                    <p class="text-outline font-medium text-[11px]">Cubo Objetivo:</p>
+                    <p class="font-bold text-primary text-sm mt-0.5" id="modal-col-cubo-nombre">-</p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <button type="button" onclick="conmutarDrawerDdlModal()" class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-white border border-outline-variant hover:border-primary transition-all flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">code</span>
+                        Importar SQL DDL
+                    </button>
+                    <button type="button" onclick="agregarFilaNuevaColumnaModal()" class="px-3 py-1.5 rounded-lg text-xs font-bold text-white bg-primary hover:bg-primary-container transition-all flex items-center gap-1 shadow-xs">
+                        <span class="material-symbols-outlined text-sm">add</span>
+                        + Añadir Columna
+                    </button>
+                </div>
+            </div>
+
+            <!-- Drawer / Panel colapsable de Importación SQL DDL -->
+            <div id="drawer-ddl-modal" class="hidden p-4 rounded-xl bg-slate-900 border border-slate-700 text-white space-y-3">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-emerald-400 font-mono flex items-center gap-1.5">
+                        <span class="material-symbols-outlined text-sm">terminal</span>
+                        Pegar Sentencia SQL DDL (CREATE TABLE o columnas)
+                    </span>
+                    <button type="button" onclick="conmutarDrawerDdlModal()" class="text-slate-400 hover:text-white">
+                        <span class="material-symbols-outlined text-sm">close</span>
+                    </button>
+                </div>
+                <textarea id="txt-ddl-modal" rows="4" class="w-full bg-slate-950 text-emerald-400 font-mono text-xs rounded-lg p-2.5 border border-slate-800 focus:ring-1 focus:ring-emerald-400 focus:outline-none" placeholder="CREATE TABLE mi_tabla (&#10;    nueva_columna VARCHAR,&#10;    monto_extra DECIMAL(18, 2)&#10;);"></textarea>
+                <div class="flex items-center justify-between">
+                    <span class="text-[10px] text-slate-400">Las columnas detectadas se anexarán a la grilla inferior.</span>
+                    <button type="button" onclick="importarDdlEnModal()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-emerald-600 hover:bg-emerald-500 text-white transition-all flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">add_circle</span>
+                        Anexar Columnas desde SQL
+                    </button>
+                </div>
+                <div id="feedback-ddl-modal" class="hidden p-2.5 rounded-lg text-xs font-bold"></div>
+            </div>
+
+            <!-- Alerta Informativa de Nuevas Columnas en NULL -->
+            <div class="p-3 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-[11px] flex items-start gap-2">
+                <span class="material-symbols-outlined text-base text-blue-600 shrink-0">info</span>
+                <span><b>Regla de Evolución:</b> Cualquier columna añadida se inicializará con valor <code>NULL</code> para todas las filas existentes en el archivo Parquet. Si desmarcas o eliminas una columna, el sistema validará que ninguna vista activa dependa de ella.</span>
+            </div>
+
+            <!-- Tarjeta de Alerta Roja ante Vistas en Conflicto -->
+            <div id="alerta-conflicto-vistas" class="hidden p-4 rounded-xl bg-error-container/20 border border-error/40 text-on-surface space-y-2">
+                <div class="flex items-center gap-2 text-error font-bold">
+                    <span class="material-symbols-outlined text-lg">error</span>
+                    <span>Modificación Bloqueada por Gobernanza</span>
+                </div>
+                <p class="text-xs text-on-surface font-medium" id="mensaje-error-conflicto"></p>
+                <div class="mt-2">
+                    <p class="font-bold text-[11px] text-error uppercase tracking-wider">Vistas activas que impiden la eliminación:</p>
+                    <ul class="mt-1 space-y-1 pl-4 list-disc text-[11px]" id="lista-vistas-conflicto"></ul>
+                </div>
+            </div>
+
+            <!-- Tabla de Selección y Edición de Columnas -->
+            <div class="border border-outline-variant/40 rounded-xl overflow-hidden shadow-xs">
+                <table class="w-full text-left">
+                    <thead class="bg-surface-container text-on-surface-variant font-bold text-[11px] uppercase">
+                        <tr>
+                            <th class="py-2.5 px-3 w-12 text-center">Incluir</th>
+                            <th class="py-2.5 px-4">Nombre de Columna</th>
+                            <th class="py-2.5 px-4 w-44">Tipo DuckDB / Parquet</th>
+                            <th class="py-2.5 px-4 w-48">Clasificación Semántica</th>
+                            <th class="py-2.5 px-3 w-12 text-center">Acción</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-outline-variant/30 text-xs" id="tabla-body-columnas">
+                        <!-- Generado dinámicamente -->
+                    </tbody>
+                </table>
+            </div>
+
+            <div id="feedback-columnas" class="hidden p-3 rounded-xl text-xs font-bold"></div>
+        </div>
+
+        <div class="mt-4 flex items-center justify-between pt-3 border-t border-outline-variant/40">
+            <button type="button" onclick="validarImpactoColumnasPrevio()" class="px-3.5 py-2 rounded-xl text-xs font-bold text-primary bg-primary/10 hover:bg-primary/20 transition-colors flex items-center gap-1.5">
+                <span class="material-symbols-outlined text-sm">shield</span>
+                Comprobar Impacto
+            </button>
+            <div class="flex items-center gap-3">
+                <button type="button" onclick="cerrarModalColumnas()" class="px-4 py-2 rounded-xl text-xs font-bold text-on-surface-variant bg-surface-container hover:bg-surface-container-high transition-colors">
+                    Cerrar
+                </button>
+                <button type="button" id="btn-guardar-columnas" onclick="guardarEsquemaColumnas()" class="px-4 py-2 rounded-xl text-xs font-bold text-white btn-glow flex items-center gap-1.5">
+                    <span class="material-symbols-outlined text-sm">save</span>
+                    Guardar Estructura (Nuevas en NULL)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let idCuboActual = null;
+    let tipoOrigenActual = null;
+    let archivoExcelSeleccionado = null;
+    let columnasCuboActual = [];
+
+    // =========================================================================
+    // CONMUTACIÓN DE ESTADO DEL CUBO
+    // =========================================================================
+    async function conmutarEstadoCubo(idCubo, nuevoEstado) {
+        const label = document.getElementById(`label-estado-${idCubo}`);
+        try {
+            const resp = await fetch(`/api/cubos/${idCubo}/estado`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estadoHabilitado: nuevoEstado })
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                label.textContent = nuevoEstado ? 'Activo' : 'Inactivo';
+            } else {
+                mostrarModalAlerta({
+                    titulo: 'Error de Actualización',
+                    mensaje: `Error al actualizar estado: ${data.error}`,
+                    tipo: 'error'
+                });
+                document.getElementById(`toggle-cubo-${idCubo}`).checked = !nuevoEstado;
+            }
+        } catch (e) {
+            mostrarModalAlerta({
+                titulo: 'Error de Conexión',
+                mensaje: 'Fallo de conexión al conmutar estado del cubo.',
+                tipo: 'error'
+            });
+            document.getElementById(`toggle-cubo-${idCubo}`).checked = !nuevoEstado;
+        }
+    }
+
+    // =========================================================================
+    // MODAL ACTUALIZAR DATOS
+    // =========================================================================
+    let analisisActualizacionExcel = null;
+
+    function abrirModalActualizar(idCubo, nombreCubo, tipoOrigen) {
+        idCuboActual = idCubo;
+        tipoOrigenActual = tipoOrigen;
+        archivoExcelSeleccionado = null;
+        analisisActualizacionExcel = null;
+
+        document.getElementById('modal-cubo-nombre').textContent = nombreCubo;
+        document.getElementById('modal-cubo-tipo').textContent = tipoOrigen;
+        document.getElementById('texto-archivo-excel').textContent = 'Haz clic para seleccionar el archivo .xlsx';
+
+        document.getElementById('panel-actualizar-excel').classList.add('hidden');
+        document.getElementById('panel-actualizar-sql').classList.add('hidden');
+        document.getElementById('panel-actualizar-generico').classList.add('hidden');
+        document.getElementById('feedback-actualizar').classList.add('hidden');
+        document.getElementById('diagnostico-excel-actualizar').classList.add('hidden');
+        document.getElementById('panel-relaciones-actualizar').classList.add('hidden');
+
+        if (tipoOrigen.toUpperCase().includes('EXCEL')) {
+            document.getElementById('panel-actualizar-excel').classList.remove('hidden');
+        } else if (tipoOrigen.toUpperCase().includes('SQL')) {
+            document.getElementById('panel-actualizar-sql').classList.remove('hidden');
+        } else {
+            document.getElementById('panel-actualizar-generico').classList.remove('hidden');
+        }
+
+        const modal = document.getElementById('modal-actualizar');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function cerrarModalActualizar() {
+        const modal = document.getElementById('modal-actualizar');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    async function seleccionarArchivoExcel(input) {
+        if (input.files && input.files[0]) {
+            archivoExcelSeleccionado = input.files[0];
+            document.getElementById('texto-archivo-excel').textContent = `Archivo seleccionado: ${archivoExcelSeleccionado.name}`;
+
+            const diag = document.getElementById('diagnostico-excel-actualizar');
+            const panelRel = document.getElementById('panel-relaciones-actualizar');
+            diag.className = "p-3 rounded-xl bg-primary/10 text-primary border border-primary/20 text-xs flex items-center gap-2";
+            diag.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">sync</span> Analizando estructura de hojas del libro con Calamine...`;
+            diag.classList.remove('hidden');
+            panelRel.classList.add('hidden');
+
+            const formData = new FormData();
+            formData.append('archivoExcel', archivoExcelSeleccionado);
+
+            try {
+                const resp = await fetch(`/api/cubos/${idCuboActual}/analizar-excel-actualizacion`, {
+                    method: 'POST',
+                    body: formData
+                });
+                const data = await resp.json();
+                if (data.exito) {
+                    analisisActualizacionExcel = data;
+                    if (data.esHomogeneo) {
+                        diag.className = "p-3 rounded-xl bg-emerald-50 text-emerald-800 border border-emerald-200 text-xs flex items-center gap-2";
+                        diag.innerHTML = `<span class="material-symbols-outlined text-emerald-600 text-sm">check_circle</span> <span><b>Hojas idénticas:</b> ${data.mensaje}</span>`;
+                        panelRel.classList.add('hidden');
+                    } else if (data.requiereRelacion) {
+                        diag.className = "p-3 rounded-xl bg-purple-50 text-purple-800 border border-purple-200 text-xs flex items-center gap-2";
+                        diag.innerHTML = `<span class="material-symbols-outlined text-purple-600 text-sm">hub</span> <span><b>Hojas diferentes:</b> ${data.mensaje}</span>`;
+                        panelRel.classList.remove('hidden');
+                        document.getElementById('conteo-relaciones-actualizar').textContent = `${data.totalHojasDimensionales} dimensión(es)`;
+                        renderizarRelacionesActualizar(data);
+                    }
+                } else {
+                    if (data.bloqueoPorVistas) {
+                        diag.className = "p-3.5 rounded-xl bg-red-50 text-red-900 border border-red-200 text-xs space-y-2";
+                        diag.innerHTML = `
+                            <div class="flex items-center gap-1.5 font-bold text-red-700 text-sm">
+                                <span class="material-symbols-outlined text-red-600 text-base">gpp_bad</span>
+                                <span>Archivo Incompatible con Vistas Analíticas</span>
+                            </div>
+                            <p class="text-xs text-red-700 font-medium">${data.error}</p>
+                            <div class="bg-white/90 p-2.5 rounded-lg border border-red-200 text-xs space-y-1">
+                                <div><strong class="text-neutral-900">Columnas faltantes requeridas:</strong></div>
+                                <div class="flex flex-wrap gap-1 mt-0.5">
+                                    ${(data.columnasEnConflicto || []).map(c => `<span class="px-2 py-0.5 bg-red-100 text-red-800 font-mono text-[11px] rounded font-bold border border-red-200">${c}</span>`).join('')}
+                                </div>
+                                <div class="mt-2 text-neutral-800">
+                                    <strong>Vistas analíticas afectadas:</strong>
+                                    <ul class="list-disc list-inside mt-0.5 text-neutral-700">
+                                        ${(data.vistasAfectadas || []).map(v => `<li><strong>${v.nombreVista}</strong> (${v.codigoVista})</li>`).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="p-2 bg-amber-50 rounded border border-amber-200 text-amber-900 text-[11px]">
+                                💡 <strong>Acción requerida:</strong> Agregue las columnas faltantes al Excel o elimine las vistas en desuso en <a href="/administracion/eliminacion" target="_blank" class="underline font-bold text-primary">Eliminación de Objetos</a>.
+                            </div>
+                        `;
+                    } else {
+                        diag.className = "p-3 rounded-xl bg-error-container/40 text-error text-xs flex items-center gap-2";
+                        diag.innerHTML = `<span class="material-symbols-outlined text-sm">error</span> <span>${data.error || 'Error al analizar archivo'}</span>`;
+                    }
+                }
+            } catch (e) {
+                diag.className = "p-3 rounded-xl bg-error-container/40 text-error text-xs flex items-center gap-2";
+                diag.innerHTML = `<span class="material-symbols-outlined text-sm">error</span> <span>Error de comunicación al inspeccionar hojas.</span>`;
+            }
+        }
+    }
+
+    function renderizarRelacionesActualizar(analisis) {
+        const lista = document.getElementById('lista-relaciones-actualizar');
+        lista.innerHTML = '';
+
+        analisis.hojasDimensionales.forEach((dim, idx) => {
+            const nomDim = dim.nombreHoja;
+            const llavesCand = (analisis.llavesCandidatas && analisis.llavesCandidatas[nomDim]) || [];
+            const llaveSugerida = llavesCand.length > 0 ? llavesCand[0] : null;
+
+            let optsHechos = '';
+            (analisis.columnasHechos || []).forEach(cH => {
+                const sel = (llaveSugerida && llaveSugerida.claveHechos === cH.nombre) ? 'selected' : '';
+                optsHechos += `<option value="${cH.nombre}" ${sel}>${cH.nombre}</option>`;
+            });
+
+            let optsDim = '';
+            dim.columnas.forEach(cD => {
+                const sel = (llaveSugerida && llaveSugerida.claveDimension === cD.nombre) ? 'selected' : '';
+                optsDim += `<option value="${cD.nombre}" ${sel}>${cD.nombre}</option>`;
+            });
+
+            const card = document.createElement('div');
+            card.className = "p-2.5 bg-white rounded-lg border border-purple-200/80 space-y-2";
+            card.innerHTML = `
+                <div class="flex items-center justify-between">
+                    <span class="font-bold text-slate-800">Hoja Dimensión: <b class="text-purple-900">${nomDim}</b></span>
+                    ${llaveSugerida ? '<span class="text-[10px] text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded font-bold">Auto-detectada</span>' : ''}
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px]">
+                    <div>
+                        <span class="text-slate-500 block mb-0.5 font-bold">Clave en Hechos:</span>
+                        <select id="upd_keyHechos_${idx}" class="w-full bg-surface-container-low border border-outline-variant rounded p-1 text-xs">
+                            ${optsHechos}
+                        </select>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 block mb-0.5 font-bold">Clave en ${nomDim}:</span>
+                        <select id="upd_keyDim_${idx}" class="w-full bg-surface-container-low border border-outline-variant rounded p-1 text-xs">
+                            ${optsDim}
+                        </select>
+                    </div>
+                    <div>
+                        <span class="text-slate-500 block mb-0.5 font-bold">Tipo JOIN:</span>
+                        <select id="upd_tipoJoin_${idx}" class="w-full bg-surface-container-low border border-outline-variant rounded p-1 text-xs">
+                            <option value="LEFT" selected>LEFT JOIN</option>
+                            <option value="INNER">INNER JOIN</option>
+                        </select>
+                    </div>
+                </div>
+            `;
+            lista.appendChild(card);
+        });
+    }
+
+    async function ejecutarActualizacionDatos() {
+        const btn = document.getElementById('btn-confirmar-actualizar');
+        const feedback = document.getElementById('feedback-actualizar');
+
+        btn.disabled = true;
+        btn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">refresh</span> Procesando...`;
+
+        try {
+            let resp;
+            if (tipoOrigenActual.toUpperCase().includes('EXCEL')) {
+                if (!archivoExcelSeleccionado) {
+                    feedback.className = 'p-3 rounded-xl text-xs font-bold bg-error-container/40 text-error';
+                    feedback.textContent = 'Debes seleccionar un archivo Excel .xlsx antes de continuar.';
+                    feedback.classList.remove('hidden');
+                    btn.disabled = false;
+                    btn.innerHTML = `<span class="material-symbols-outlined text-sm">refresh</span> Ejecutar Refresco`;
+                    return;
+                }
+                const formData = new FormData();
+                formData.append('archivoExcel', archivoExcelSeleccionado);
+
+                if (analisisActualizacionExcel) {
+                    if (analisisActualizacionExcel.hojasIdenticas) {
+                        formData.append('hojasUnificarJson', JSON.stringify(analisisActualizacionExcel.hojasIdenticas));
+                    }
+                    if (analisisActualizacionExcel.requiereRelacion && analisisActualizacionExcel.hojasDimensionales) {
+                        const relaciones = [];
+                        analisisActualizacionExcel.hojasDimensionales.forEach((dim, idx) => {
+                            const selH = document.getElementById(`upd_keyHechos_${idx}`);
+                            const selD = document.getElementById(`upd_keyDim_${idx}`);
+                            const selJ = document.getElementById(`upd_tipoJoin_${idx}`);
+                            if (selH && selD && selJ) {
+                                relaciones.push({
+                                    nombreDimension: dim.nombreHoja,
+                                    claveHechos: selH.value,
+                                    claveDimension: selD.value,
+                                    tipoJoin: selJ.value
+                                });
+                            }
+                        });
+                        formData.append('relacionesJson', JSON.stringify(relaciones));
+                    }
+                }
+
+                resp = await fetch(`/api/cubos/${idCuboActual}/actualizar-datos`, {
+                    method: 'POST',
+                    body: formData
+                });
+            } else {
+                resp = await fetch(`/api/cubos/${idCuboActual}/actualizar-datos`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+
+            const data = await resp.json();
+            if (data.exito) {
+                feedback.className = 'p-3 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200';
+                feedback.textContent = `${data.mensaje} (Filas actuales: ${data.totalFilas?.toLocaleString() || 'N/A'})`;
+                feedback.classList.remove('hidden');
+                setTimeout(() => { window.location.reload(); }, 1500);
+            } else {
+                feedback.className = 'p-3.5 rounded-xl text-xs bg-red-50 text-red-900 border border-red-200';
+                if (data.bloqueoPorVistas) {
+                    feedback.innerHTML = `
+                        <div class="space-y-2 text-left">
+                            <div class="flex items-center gap-1.5 font-bold text-red-700 text-sm">
+                                <span class="material-symbols-outlined text-base">gpp_bad</span>
+                                <span>Actualización Bloqueada: Vistas en Conflicto</span>
+                            </div>
+                            <p class="font-medium text-red-700">${data.error}</p>
+                            <div class="bg-white/90 p-2.5 rounded-lg border border-red-200 space-y-1">
+                                <div><strong class="text-neutral-900">Columnas faltantes requeridas:</strong></div>
+                                <div class="flex flex-wrap gap-1 mt-0.5">
+                                    ${(data.columnasEnConflicto || []).map(c => `<span class="px-2 py-0.5 bg-red-100 text-red-800 font-mono text-[11px] rounded font-bold border border-red-200">${c}</span>`).join('')}
+                                </div>
+                                <div class="mt-2 text-neutral-800">
+                                    <strong>Vistas afectadas:</strong>
+                                    <ul class="list-disc list-inside mt-0.5 text-neutral-700">
+                                        ${(data.vistasAfectadas || []).map(v => `<li><strong>${v.nombreVista}</strong> (${v.codigoVista}) - Requiere: ${(v.columnasFaltantes || []).join(', ')}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="p-2 bg-amber-50 rounded border border-amber-200 text-amber-900 text-[11px]">
+                                💡 <strong>Acción requerida:</strong> Restituya las columnas en el origen o elimine las vistas en <a href="/administracion/eliminacion" target="_blank" class="underline font-bold text-primary">Eliminación de Objetos</a>.
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    feedback.textContent = `Error: ${data.error}`;
+                }
+                feedback.classList.remove('hidden');
+            }
+        } catch (e) {
+            feedback.className = 'p-3 rounded-xl text-xs font-bold bg-error-container/40 text-error';
+            feedback.textContent = 'Fallo de conexión al ejecutar actualización.';
+            feedback.classList.remove('hidden');
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<span class="material-symbols-outlined text-sm">refresh</span> Ejecutar Refresco`;
+        }
+    }
+
+    // =========================================================================
+    // MODAL MODIFICAR ESTRUCTURA DE CUBOS Y GOBERNANZA DE IMPACTO
+    // =========================================================================
+    let contadorNuevasColumnasModal = 0;
+
+    function abrirModalColumnas(idCubo, nombreCubo, columnas) {
+        idCuboActual = idCubo;
+        columnasCuboActual = columnas || [];
+        contadorNuevasColumnasModal = 0;
+
+        document.getElementById('modal-col-cubo-nombre').textContent = nombreCubo;
+        document.getElementById('alerta-conflicto-vistas').classList.add('hidden');
+        document.getElementById('feedback-columnas').classList.add('hidden');
+        document.getElementById('drawer-ddl-modal').classList.add('hidden');
+        document.getElementById('txt-ddl-modal').value = '';
+
+        const tbody = document.getElementById('tabla-body-columnas');
+        tbody.innerHTML = '';
+
+        columnasCuboActual.forEach((col, idx) => {
+            const tr = document.createElement('tr');
+            tr.className = 'hover:bg-surface-container-low/50 fila-columna-existente';
+            tr.id = `fila-col-existente-${idx}`;
+            tr.innerHTML = `
+                <td class="py-2.5 px-3 text-center">
+                    <input type="checkbox" id="col-check-${idx}" checked class="rounded text-primary focus:ring-primary h-4 w-4 cursor-pointer" onchange="alConmutarCheckColumnaExistente(${idx})">
+                </td>
+                <td class="py-2.5 px-4 font-mono font-bold text-on-surface">
+                    <span id="col-nombre-${idx}">${col.nombre}</span>
+                </td>
+                <td class="py-2.5 px-4 text-outline font-mono text-[11px]">
+                    <span id="col-tipo-${idx}">${col.tipo || 'VARCHAR'}</span>
+                </td>
+                <td class="py-2.5 px-4">
+                    <select id="col-clasif-${idx}" class="text-xs py-1 px-2 rounded-lg border border-outline-variant bg-white focus:ring-primary focus:border-primary w-full font-bold text-on-surface">
+                        <option value="Categorica/Dimension" ${col.clasificacion === 'Categorica/Dimension' ? 'selected' : ''}>Categorica/Dimension</option>
+                        <option value="MetricaSumable" ${col.clasificacion === 'MetricaSumable' ? 'selected' : ''}>MetricaSumable</option>
+                        <option value="Temporal" ${col.clasificacion === 'Temporal' ? 'selected' : ''}>Temporal</option>
+                        <option value="MetricaNoSumable" ${col.clasificacion === 'MetricaNoSumable' ? 'selected' : ''}>MetricaNoSumable</option>
+                        <option value="Identificador/Descarte" ${col.clasificacion === 'Identificador/Descarte' ? 'selected' : ''}>Identificador/Descarte</option>
+                    </select>
+                </td>
+                <td class="py-2.5 px-3 text-center text-slate-300">
+                    <span class="material-symbols-outlined text-sm" title="Columna actual del archivo">lock</span>
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        const modal = document.getElementById('modal-columnas');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+    }
+
+    function alConmutarCheckColumnaExistente(idx) {
+        const check = document.getElementById(`col-check-${idx}`);
+        const tr = document.getElementById(`fila-col-existente-${idx}`);
+        if (!check || !tr) return;
+        if (check.checked) {
+            tr.classList.remove('opacity-40', 'line-through', 'bg-red-50/40');
+        } else {
+            tr.classList.add('opacity-40', 'line-through', 'bg-red-50/40');
+        }
+    }
+
+    function conmutarDrawerDdlModal() {
+        const drawer = document.getElementById('drawer-ddl-modal');
+        drawer.classList.toggle('hidden');
+    }
+
+    function agregarFilaNuevaColumnaModal(nombre = '', tipo = 'VARCHAR', clasif = 'Categorica/Dimension') {
+        const tbody = document.getElementById('tabla-body-columnas');
+        if (!tbody) return;
+
+        contadorNuevasColumnasModal++;
+        const idRow = `fila-col-nueva-${contadorNuevasColumnasModal}`;
+        const tr = document.createElement('tr');
+        tr.className = 'bg-emerald-50/40 hover:bg-emerald-50/80 transition-colors fila-columna-nueva';
+        tr.id = idRow;
+        tr.innerHTML = `
+            <td class="py-2.5 px-3 text-center">
+                <input type="checkbox" checked disabled class="rounded text-emerald-600 h-4 w-4 cursor-not-allowed">
+            </td>
+            <td class="py-2.5 px-4">
+                <input type="text" value="${nombre}" placeholder="nombre_nueva_columna" class="col-nueva-nom w-full bg-white border border-emerald-300 rounded-lg px-2 py-1 text-xs font-mono font-bold text-emerald-800 focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+            </td>
+            <td class="py-2.5 px-4">
+                <select class="col-nueva-tipo w-full bg-white border border-emerald-300 rounded-lg px-2 py-1 text-xs font-mono font-bold text-on-surface focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    <option value="VARCHAR" ${tipo === 'VARCHAR' ? 'selected' : ''}>VARCHAR</option>
+                    <option value="BIGINT" ${tipo === 'BIGINT' ? 'selected' : ''}>BIGINT</option>
+                    <option value="INTEGER" ${tipo === 'INTEGER' ? 'selected' : ''}>INTEGER</option>
+                    <option value="DOUBLE" ${tipo === 'DOUBLE' ? 'selected' : ''}>DOUBLE</option>
+                    <option value="DECIMAL(18,2)" ${tipo.startsWith('DECIMAL') ? 'selected' : ''}>DECIMAL(18,2)</option>
+                    <option value="DATE" ${tipo === 'DATE' ? 'selected' : ''}>DATE</option>
+                    <option value="TIMESTAMP" ${tipo === 'TIMESTAMP' ? 'selected' : ''}>TIMESTAMP</option>
+                    <option value="BOOLEAN" ${tipo === 'BOOLEAN' ? 'selected' : ''}>BOOLEAN</option>
+                </select>
+            </td>
+            <td class="py-2.5 px-4">
+                <select class="col-nueva-clasif w-full bg-white border border-emerald-300 rounded-lg px-2 py-1 text-xs font-bold text-on-surface focus:ring-1 focus:ring-emerald-500 focus:outline-none">
+                    <option value="Categorica/Dimension" ${clasif === 'Categorica/Dimension' ? 'selected' : ''}>Categorica/Dimension</option>
+                    <option value="MetricaSumable" ${clasif === 'MetricaSumable' ? 'selected' : ''}>MetricaSumable</option>
+                    <option value="Temporal" ${clasif === 'Temporal' ? 'selected' : ''}>Temporal</option>
+                </select>
+            </td>
+            <td class="py-2.5 px-3 text-center">
+                <button type="button" onclick="document.getElementById('${idRow}').remove()" class="w-7 h-7 rounded-lg text-slate-400 hover:text-error hover:bg-error/10 transition-colors inline-flex items-center justify-center" title="Quitar nueva columna">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+        tr.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    async function importarDdlEnModal() {
+        const ddl = document.getElementById('txt-ddl-modal').value.trim();
+        const fb = document.getElementById('feedback-ddl-modal');
+        fb.classList.add('hidden');
+
+        if (!ddl) {
+            mostrarModalAlerta({
+                titulo: 'Sentencia Vacía',
+                mensaje: 'Pega un bloque CREATE TABLE o lista de columnas SQL para importar.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        try {
+            const resp = await fetch('/api/cubos/parsear-ddl', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ddl: ddl })
+            });
+            const data = await resp.json();
+
+            if (data.exito && data.columnas && data.columnas.length > 0) {
+                data.columnas.forEach(c => {
+                    agregarFilaNuevaColumnaModal(c.nombre, c.tipo, c.clasificacion);
+                });
+                document.getElementById('drawer-ddl-modal').classList.add('hidden');
+                document.getElementById('txt-ddl-modal').value = '';
+                mostrarModalAlerta({
+                    titulo: 'Columnas Anexadas',
+                    mensaje: `Se anexaron ${data.columnas.length} nuevas columnas desde el DDL SQL. Recuerda hacer clic en "Guardar Estructura" para aplicar los cambios (se inicializarán con NULL en el Parquet).`,
+                    tipo: 'exito'
+                });
+            } else {
+                fb.className = "p-2.5 rounded-lg bg-error-container/40 text-error text-xs font-bold";
+                fb.textContent = data.error || 'No se pudieron extraer columnas.';
+                fb.classList.remove('hidden');
+            }
+        } catch (e) {
+            fb.className = "p-2.5 rounded-lg bg-error-container/40 text-error text-xs font-bold";
+            fb.textContent = 'Error al comunicarse con el validador DDL.';
+            fb.classList.remove('hidden');
+        }
+    }
+
+    function cerrarModalColumnas() {
+        const modal = document.getElementById('modal-columnas');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    function obtenerNuevasColumnasSeleccionadas() {
+        const seleccionadas = [];
+        // Columnas existentes marcadas
+        columnasCuboActual.forEach((col, idx) => {
+            const check = document.getElementById(`col-check-${idx}`);
+            if (check && check.checked) {
+                seleccionadas.push(col.nombre);
+            }
+        });
+        // Columnas nuevas añadidas
+        document.querySelectorAll('.fila-columna-nueva').forEach(tr => {
+            const inp = tr.querySelector('.col-nueva-nom');
+            if (inp && inp.value.trim()) {
+                seleccionadas.push(inp.value.trim());
+            }
+        });
+        return seleccionadas;
+    }
+
+    async function validarImpactoColumnasPrevio() {
+        const alerta = document.getElementById('alerta-conflicto-vistas');
+        const feedback = document.getElementById('feedback-columnas');
+        alerta.classList.add('hidden');
+        feedback.classList.add('hidden');
+
+        const nuevasColumnas = obtenerNuevasColumnasSeleccionadas();
+
+        try {
+            const resp = await fetch(`/api/cubos/${idCuboActual}/validar-esquema`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nuevasColumnas: nuevasColumnas })
+            });
+            const data = await resp.json();
+
+            if (!data.permitido) {
+                document.getElementById('mensaje-error-conflicto').textContent = data.mensaje;
+                const ul = document.getElementById('lista-vistas-conflicto');
+                ul.innerHTML = '';
+                data.vistasAfectadas.forEach(va => {
+                    const li = document.createElement('li');
+                    li.innerHTML = `<span class="font-bold">${va.nombreVista}</span> (${va.codigoVista}) requiere: <span class="font-mono text-error font-bold">${va.columnasFaltantes.join(', ')}</span>`;
+                    ul.appendChild(li);
+                });
+                alerta.classList.remove('hidden');
+                return false;
+            } else {
+                feedback.className = 'p-3 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200';
+                feedback.textContent = data.mensaje;
+                feedback.classList.remove('hidden');
+                return true;
+            }
+        } catch (e) {
+            mostrarModalAlerta({
+                titulo: 'Error de Conexión',
+                mensaje: 'Fallo de conexión al validar impacto.',
+                tipo: 'error'
+            });
+            return false;
+        }
+    }
+
+    async function guardarEsquemaColumnas() {
+        const esValido = await validarImpactoColumnasPrevio();
+        if (!esValido) {
+            return;
+        }
+
+        const mapeo = {};
+        // 1. Columnas existentes que permanecen marcadas
+        columnasCuboActual.forEach((col, idx) => {
+            const check = document.getElementById(`col-check-${idx}`);
+            if (check && check.checked) {
+                const clasif = document.getElementById(`col-clasif-${idx}`).value;
+                mapeo[col.nombre] = {
+                    tipoDato: col.tipo || 'VARCHAR',
+                    clasificacionSemantica: clasif
+                };
+            }
+        });
+
+        // 2. Nuevas columnas agregadas dinámicamente
+        let errorNombreNuevo = false;
+        document.querySelectorAll('.fila-columna-nueva').forEach(tr => {
+            const nomInp = tr.querySelector('.col-nueva-nom');
+            const tipoSel = tr.querySelector('.col-nueva-tipo');
+            const clasifSel = tr.querySelector('.col-nueva-clasif');
+
+            const nom = nomInp ? nomInp.value.trim() : '';
+            const tipo = tipoSel ? tipoSel.value : 'VARCHAR';
+            const clasif = clasifSel ? clasifSel.value : 'Categorica/Dimension';
+
+            if (!nom) {
+                errorNombreNuevo = true;
+            } else {
+                mapeo[nom] = {
+                    tipoDato: tipo,
+                    clasificacionSemantica: clasif
+                };
+            }
+        });
+
+        if (errorNombreNuevo) {
+            mostrarModalAlerta({
+                titulo: 'Nombre de Columna Inválido',
+                mensaje: 'Todas las columnas nuevas añadidas deben tener un nombre asignado.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        if (Object.keys(mapeo).length === 0) {
+            mostrarModalAlerta({
+                titulo: 'Esquema Vacío',
+                mensaje: 'El cubo debe contener al menos una columna.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const btn = document.getElementById('btn-guardar-columnas');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span> Evolucionando Parquet...';
+
+        const feedback = document.getElementById('feedback-columnas');
+        try {
+            const resp = await fetch(`/api/cubos/${idCuboActual}/columnas`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mapeoColumnas: mapeo })
+            });
+            const data = await resp.json();
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-symbols-outlined text-sm">save</span> Guardar Estructura (Nuevas en NULL)';
+
+            if (data.exito) {
+                feedback.className = 'p-3 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200';
+                feedback.textContent = data.mensaje;
+                feedback.classList.remove('hidden');
+                setTimeout(() => { window.location.reload(); }, 1400);
+            } else {
+                feedback.className = 'p-3 rounded-xl text-xs font-bold bg-error-container/40 text-error';
+                feedback.textContent = data.error;
+                feedback.classList.remove('hidden');
+            }
+        } catch (e) {
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-symbols-outlined text-sm">save</span> Guardar Estructura (Nuevas en NULL)';
+            feedback.className = 'p-3 rounded-xl text-xs font-bold bg-error-container/40 text-error';
+            feedback.textContent = 'Error al persistir cambios de estructura.';
+        }
+    }
+
+    // =========================================================================
+    // MODAL: MODIFICAR COMANDO SQL DEL CUBO
+    // =========================================================================
+    async function abrirModalEditarSql(idCubo, nombreCubo) {
+        document.getElementById('modal-sql-cubo-id').value = idCubo;
+        document.getElementById('modal-sql-cubo-nombre').textContent = nombreCubo;
+        document.getElementById('modal-sql-consulta').value = 'Cargando consulta configurada...';
+        document.getElementById('modal-sql-resultado-prueba').classList.add('hidden');
+        document.getElementById('modal-sql-feedback').classList.add('hidden');
+
+        const modal = document.getElementById('modal-editar-sql');
+        modal.classList.remove('hidden');
+        modal.classList.add('flex');
+
+        try {
+            const resp = await fetch(`/api/cubos/${idCubo}/sql`);
+            const data = await resp.json();
+            if (data.exito) {
+                document.getElementById('modal-sql-consulta').value = data.consultaSql || '';
+                if (data.idConexion) {
+                    document.getElementById('modal-sql-conexion').value = data.idConexion;
+                }
+            } else {
+                document.getElementById('modal-sql-consulta').value = '';
+                mostrarModalAlerta({
+                    titulo: 'Error al Cargar SQL',
+                    mensaje: 'No se pudo cargar la consulta SQL: ' + (data.error || 'Error desconocido'),
+                    tipo: 'error'
+                });
+            }
+        } catch (e) {
+            console.error(e);
+            mostrarModalAlerta({
+                titulo: 'Error de Conexión',
+                mensaje: 'Error al obtener datos SQL del cubo.',
+                tipo: 'error'
+            });
+        }
+    }
+
+    function cerrarModalEditarSql() {
+        const modal = document.getElementById('modal-editar-sql');
+        modal.classList.add('hidden');
+        modal.classList.remove('flex');
+    }
+
+    async function probarSqlModal() {
+        const sql = document.getElementById('modal-sql-consulta').value.trim();
+        const idConexion = document.getElementById('modal-sql-conexion').value;
+        const resDiv = document.getElementById('modal-sql-resultado-prueba');
+        const btn = document.getElementById('btn-probar-sql-modal');
+
+        if (!sql) {
+            mostrarModalAlerta({
+                titulo: 'Consulta Vacía',
+                mensaje: 'Ingresa una consulta SQL para probar.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        resDiv.classList.remove('hidden');
+        resDiv.innerHTML = '<span class="text-primary font-bold flex items-center gap-1.5"><span class="material-symbols-outlined text-sm animate-spin">sync</span> Validando sintaxis y ejecutando muestra...</span>';
+        btn.disabled = true;
+
+        try {
+            const resp = await fetch('/api/sql/probar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    idConexion: idConexion ? parseInt(idConexion) : null,
+                    consultaSql: sql
+                })
+            });
+            const data = await resp.json();
+            btn.disabled = false;
+
+            if (data.exito) {
+                let html = `<p class="font-bold text-secondary mb-1.5 flex items-center gap-1"><span class="material-symbols-outlined text-sm">check_circle</span> Consulta válida: ${data.totalFilasMuestra || data.filas.length} filas de muestra, ${data.columnas.length} columnas detectadas.</p>`;
+                html += `<div class="overflow-x-auto max-h-28 border border-outline-variant/40 rounded-lg bg-white shadow-xs"><table class="w-full text-[10px] text-left"><thead><tr class="bg-surface-container font-bold">`;
+                data.columnas.forEach(c => { html += `<th class="p-1.5 whitespace-nowrap font-mono">${c}</th>`; });
+                html += `</tr></thead><tbody>`;
+                data.filas.slice(0, 3).forEach(r => {
+                    html += `<tr class="border-t border-outline-variant/20">`;
+                    data.columnas.forEach(c => { html += `<td class="p-1.5 whitespace-nowrap">${r[c] !== null ? r[c] : ''}</td>`; });
+                    html += `</tr>`;
+                });
+                html += `</tbody></table></div>`;
+                resDiv.innerHTML = html;
+            } else {
+                resDiv.innerHTML = `<span class="text-error font-bold flex items-center gap-1"><span class="material-symbols-outlined text-sm">error</span> Error: ${data.error}</span>`;
+            }
+        } catch (e) {
+            btn.disabled = false;
+            resDiv.innerHTML = `<span class="text-error font-bold flex items-center gap-1"><span class="material-symbols-outlined text-sm">error</span> Error de conexión: ${e.message}</span>`;
+        }
+    }
+
+    async function guardarSqlCubo() {
+        const idCubo = document.getElementById('modal-sql-cubo-id').value;
+        const sql = document.getElementById('modal-sql-consulta').value.trim();
+        const idConexion = document.getElementById('modal-sql-conexion').value;
+        const removerTop = document.getElementById('modal-sql-remover-top').checked;
+        const ejecutarRefresco = document.getElementById('modal-sql-ejecutar-refresco').checked;
+        const feedback = document.getElementById('modal-sql-feedback');
+        const btn = document.getElementById('btn-guardar-sql-cubo');
+
+        if (!sql) {
+            mostrarModalAlerta({
+                titulo: 'Consulta Vacía',
+                mensaje: 'La consulta SQL no puede estar vacía.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span> Guardando y procesando...';
+        feedback.classList.add('hidden');
+
+        try {
+            const resp = await fetch(`/api/cubos/${idCubo}/sql`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    consultaSql: sql,
+                    idConexion: idConexion ? parseInt(idConexion) : null,
+                    removerLimiteMuestra: removerTop,
+                    ejecutarRefresco: ejecutarRefresco
+                })
+            });
+            const data = await resp.json();
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-symbols-outlined text-sm">save</span> Guardar y Aplicar Cambios';
+
+            if (data.exito) {
+                feedback.className = 'p-3 rounded-xl text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-200';
+                feedback.innerHTML = `✅ ${data.mensaje}`;
+                feedback.classList.remove('hidden');
+                setTimeout(() => { window.location.reload(); }, 1500);
+            } else {
+                feedback.className = 'p-3.5 rounded-xl text-xs bg-red-50 text-red-900 border border-red-200';
+                if (data.bloqueoPorVistas) {
+                    feedback.innerHTML = `
+                        <div class="space-y-2 text-left">
+                            <div class="flex items-center gap-1.5 font-bold text-red-700 text-sm">
+                                <span class="material-symbols-outlined text-base">gpp_bad</span>
+                                <span>Consulta Bloqueada: Vistas en Conflicto</span>
+                            </div>
+                            <p class="font-medium text-red-700">${data.error}</p>
+                            <div class="bg-white/90 p-2.5 rounded-lg border border-red-200 space-y-1">
+                                <div><strong class="text-neutral-900">Columnas requeridas no proyectadas en la consulta:</strong></div>
+                                <div class="flex flex-wrap gap-1 mt-0.5">
+                                    ${(data.columnasEnConflicto || []).map(c => `<span class="px-2 py-0.5 bg-red-100 text-red-800 font-mono text-[11px] rounded font-bold border border-red-200">${c}</span>`).join('')}
+                                </div>
+                                <div class="mt-2 text-neutral-800">
+                                    <strong>Vistas que dependen de estas columnas:</strong>
+                                    <ul class="list-disc list-inside mt-0.5 text-neutral-700">
+                                        ${(data.vistasAfectadas || []).map(v => `<li><strong>${v.nombreVista}</strong> (${v.codigoVista}) - Requiere: ${(v.columnasFaltantes || []).join(', ')}</li>`).join('')}
+                                    </ul>
+                                </div>
+                            </div>
+                            <div class="p-2 bg-amber-50 rounded border border-amber-200 text-amber-900 text-[11px]">
+                                💡 <strong>Acción requerida:</strong> Incluya las columnas en la cláusula SELECT o dé de baja las vistas dependientes en <a href="/administracion/eliminacion" target="_blank" class="underline font-bold text-primary">Eliminación de Objetos</a>.
+                            </div>
+                        </div>
+                    `;
+                } else {
+                    feedback.textContent = `❌ ${data.error || 'Error al actualizar SQL'}`;
+                }
+                feedback.classList.remove('hidden');
+            }
+        } catch (e) {
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-symbols-outlined text-sm">save</span> Guardar y Aplicar Cambios';
+            feedback.className = 'p-3 rounded-xl text-xs font-bold bg-error-container/40 text-error';
+            feedback.textContent = `❌ Error de comunicación: ${e.message}`;
+            feedback.classList.remove('hidden');
+        }
+    }
+</script>
+{% endblock %}

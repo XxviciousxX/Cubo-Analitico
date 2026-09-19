@@ -1,0 +1,2637 @@
+{% extends "base.html" %}
+
+{% block title %}Ingesta y Modelado OBT | Sistema Analítico{% endblock %}
+{% block page_title %}Ingesta y Modelado de Datos{% endblock %}
+
+{% block content %}
+<div class="space-y-6">
+    <!-- Encabezado de Sección -->
+    <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs">
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div>
+                <h3 class="font-display font-black text-lg text-primary">Ingesta, Perfilado y Creación de Cubos OBT</h3>
+                <p class="text-xs text-on-surface-variant mt-1">Carga multitabla Excel vía Calamine (Rust), consultas SQL con Throttling, Data Lake Parquet y Enlaces JOIN.</p>
+            </div>
+            <!-- Navegación de Pestañas Internas -->
+            <div class="flex flex-wrap items-center gap-1.5 p-1 bg-surface-container-low rounded-xl border border-outline-variant/50 self-start md:self-auto">
+                <button type="button" onclick="mostrarPestana('excel')" id="tabBtn-excel" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-primary shadow-xs">
+                    Excel (Calamine)
+                </button>
+                <button type="button" onclick="mostrarPestana('sql')" id="tabBtn-sql" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-on-surface-variant hover:text-on-surface">
+                    SQL en Vivo (5m)
+                </button>
+                <button type="button" onclick="mostrarPestana('datalake')" id="tabBtn-datalake" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-on-surface-variant hover:text-on-surface">
+                    Data Lake Parquet
+                </button>
+                <button type="button" onclick="mostrarPestana('compuesto')" id="tabBtn-compuesto" class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-on-surface-variant hover:text-on-surface flex items-center gap-1">
+                    <span class="material-symbols-outlined text-xs">join_inner</span> Cubo Compuesto (JOIN)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pestaña 1: Excel con Calamine -->
+    <div id="pestana-excel" class="space-y-6">
+        <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs space-y-5">
+            <h4 class="font-display font-bold text-sm text-on-surface flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">table_chart</span>
+                Paso 1: Selección de Archivo Excel (.xlsx)
+            </h4>
+
+            <div>
+                <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">
+                    Subir Archivo Excel (.xlsx)
+                </label>
+                <input type="file" id="inputExcel" accept=".xlsx" onchange="analizarArchivoExcel()" class="w-full text-xs text-on-surface border border-outline-variant rounded-xl p-2.5 bg-surface-container-low focus:outline-none focus:border-primary">
+            </div>
+
+            <div id="alertaExcel" class="hidden p-3 rounded-xl text-xs flex items-center gap-2"></div>
+
+            <!-- Banner Informativo de Unificación Automática de Hojas Idénticas -->
+            <div id="bannerHojasIdenticas" class="hidden p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-start gap-3 shadow-xs">
+                <span class="material-symbols-outlined text-emerald-600 text-xl shrink-0 mt-0.5">auto_awesome</span>
+                <div class="flex-1 space-y-1">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+                        <span class="font-bold text-xs" id="tituloBannerIdenticas">✨ Hojas con estructura idéntica detectadas</span>
+                        <span id="badgeConteoIdenticas" class="px-2.5 py-0.5 rounded-full bg-emerald-200/80 text-emerald-800 text-[11px] font-bold font-mono self-start sm:self-auto">0 hojas</span>
+                    </div>
+                    <p class="text-[11px] text-emerald-700">
+                        Estas hojas comparten exactamente las mismas columnas y serán <b>unificadas automáticamente (UNION ALL)</b> en un solo cubo consolidado. Se incluirá la columna de auditoría <code>hoja_origen</code> para trazabilidad.
+                    </p>
+                    <details class="text-[11px] text-emerald-800 pt-1 cursor-pointer">
+                        <summary class="font-bold hover:underline">Ver listado de hojas unificadas</summary>
+                        <div id="listaChipsHojasIdenticas" class="flex flex-wrap gap-1 mt-1.5 max-h-32 overflow-y-auto">
+                            <!-- Chips inyectados por JS -->
+                        </div>
+                    </details>
+                </div>
+            </div>
+
+            <!-- Selector de Modo de Ingesta Excel: Simple, Multi-Hoja o Diagrama de Estrella -->
+            <div id="contenedorModoExcel" class="hidden p-3.5 bg-surface-container-low rounded-xl border border-outline-variant/60 flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+                <div class="flex items-center gap-2.5">
+                    <div class="w-8 h-8 rounded-lg bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                        <span class="material-symbols-outlined text-base">alt_route</span>
+                    </div>
+                    <div>
+                        <span class="text-xs font-bold text-slate-800">Estrategia de Modelado Excel:</span>
+                        <p class="text-[11px] text-slate-500">Unifica hojas idénticas en un cubo simple, cruza 2 hojas puntuales o modela un Diagrama de Estrella.</p>
+                    </div>
+                </div>
+                <div class="flex flex-wrap items-center gap-1.5 p-1 bg-white rounded-lg border border-outline-variant/60 self-start lg:self-auto">
+                    <button type="button" id="btnModoExcelSimple" onclick="cambiarModoExcel('simple')" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-primary text-white shadow-xs">
+                        Cubo Simple / Unificado
+                    </button>
+                    <button type="button" id="btnModoExcelEstrella" onclick="cambiarModoExcel('estrella')" class="hidden px-3 py-1.5 rounded-md text-xs font-bold transition-all text-purple-700 hover:text-purple-900 hover:bg-purple-50 flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">hub</span>
+                        Diagrama de Estrella (Relacionar Cubos)
+                    </button>
+                    <button type="button" id="btnModoExcelMultiHoja" onclick="cambiarModoExcel('multihoja')" class="px-3 py-1.5 rounded-md text-xs font-bold transition-all text-slate-600 hover:text-primary flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">join</span>
+                        Unión Par 2 Hojas (JOIN)
+                    </button>
+                </div>
+            </div>
+
+            <!-- Modo 1: Configuración de Hoja Simple -->
+            <div id="seccionConfiguracion" class="hidden space-y-5 pt-2 border-t border-outline-variant/40">
+                <h4 class="font-display font-bold text-sm text-on-surface flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">schema</span>
+                    Paso 2: Parámetros del Cubo y Configuración de Hoja
+                </h4>
+
+                <div class="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Hoja de Trabajo</label>
+                        <select id="selectorHojaExcel" onchange="cambiarHojaExcel()" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface">
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Nombre del Cubo</label>
+                        <input type="text" id="nombreCubo" placeholder="ej. Reporte Histórico 2026" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Código / Slug</label>
+                        <input type="text" id="codigoCubo" placeholder="ej. cubo_reporte_historico" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-mono font-bold text-primary">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Modalidad de Ingesta</label>
+                        <select id="modalidadCubo" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface">
+                            <option value="ExcelModalidadA">Modalidad A (Histórico Acumulado)</option>
+                            <option value="ExcelModalidadB">Modalidad B (Validación en Sesión)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="p-4 bg-surface-container-low rounded-xl border border-outline-variant/50 flex items-center justify-between">
+                    <div>
+                        <span class="text-xs font-bold text-primary uppercase tracking-wider block mb-1">📄 Resumen de Lectura (Calamine Rust):</span>
+                        <p class="text-xs text-on-surface-variant" id="textoResumenHoja">Archivo cargado en memoria.</p>
+                    </div>
+                    <span id="badgeTotalFilas" class="px-3 py-1 rounded-full bg-primary/10 text-primary text-xs font-bold font-mono">0 filas</span>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <span class="text-xs font-bold text-on-surface-variant uppercase tracking-wider block mb-2">Clasificación Semántica de Columnas (Contrato OBT):</span>
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-surface-container text-on-surface-variant font-bold border-b border-outline-variant/50">
+                                <th class="py-2.5 px-3">Columna</th>
+                                <th class="py-2.5 px-3">Tipo de Dato (Cubo)</th>
+                                <th class="py-2.5 px-3">Clasificación Semántica</th>
+                                <th class="py-2.5 px-3 text-center">Obligatoria</th>
+                            </tr>
+                        </thead>
+                        <tbody id="filasColumnasContrato" class="divide-y divide-outline-variant/30 text-on-surface">
+                            <!-- Inyectado dinámicamente -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <button type="button" id="btnGuardarExcel" onclick="guardarYGenerarParquet()" class="btn-glow text-on-primary font-bold px-6 py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm w-full md:w-auto">
+                    <span class="material-symbols-outlined text-sm">save</span>
+                    Guardar Contrato y Generar Cubo Parquet OBT
+                </button>
+            </div>
+
+            <!-- Modo 2: Configuración Multi-Hoja con JOIN Relacional -->
+            <div id="seccionConfiguracionMultiHoja" class="hidden space-y-5 pt-2 border-t border-outline-variant/40">
+                <div class="flex items-center justify-between">
+                    <h4 class="font-display font-bold text-sm text-on-surface flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">join_inner</span>
+                        Paso 2: Cruce Relacional entre Hojas (JOIN Multi-Key)
+                    </h4>
+                    <span class="text-[11px] text-slate-500">Unifica dos tablas del mismo libro de cálculo con DuckDB vectorizado.</span>
+                </div>
+
+                <!-- Selección de Hoja A y Hoja B -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/60">
+                    <div class="space-y-2">
+                        <label class="block text-xs font-black uppercase text-primary tracking-wide">
+                            🔷 Hoja Origen A (Tabla Hechos / Principal)
+                        </label>
+                        <select id="selHojaMultiA" onchange="alCambiarHojasMulti()" class="w-full text-xs px-3 py-2 bg-white border border-outline-variant rounded-xl font-bold text-on-surface focus:ring-2 focus:ring-primary/20">
+                        </select>
+                        <p class="text-[10px] text-slate-400" id="resumenHojaMultiA"></p>
+                    </div>
+                    <div class="space-y-2">
+                        <label class="block text-xs font-black uppercase text-secondary tracking-wide">
+                            🔶 Hoja Origen B (Tabla Dimensional / Secundaria)
+                        </label>
+                        <select id="selHojaMultiB" onchange="alCambiarHojasMulti()" class="w-full text-xs px-3 py-2 bg-white border border-outline-variant rounded-xl font-bold text-on-surface focus:ring-2 focus:ring-secondary/20">
+                        </select>
+                        <p class="text-[10px] text-slate-400" id="resumenHojaMultiB"></p>
+                    </div>
+                </div>
+
+                <!-- Condiciones de Cruce Claves Compuestas para Excel -->
+                <div class="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/60 space-y-3">
+                    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div>
+                            <label class="block text-xs font-black uppercase text-primary tracking-wide flex items-center gap-1.5">
+                                <span class="material-symbols-outlined text-base">link</span>
+                                Condiciones de Cruce (Claves Compuestas)
+                            </label>
+                            <p class="text-[11px] text-on-surface-variant">
+                                Cruza por más de un parámetro (ej: <code>nro_poliza</code> AND <code>endoso</code>).
+                            </p>
+                        </div>
+                        <button type="button" onclick="agregarFilaCondicionExcel()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-all flex items-center gap-1.5 self-start">
+                            <span class="material-symbols-outlined text-sm">add_link</span>
+                            + Agregar Condición (AND)
+                        </button>
+                    </div>
+
+                    <div id="contenedorCondicionesExcel" class="space-y-2">
+                        <!-- Filas inyectadas por JS -->
+                    </div>
+                </div>
+
+                <!-- Tipo de JOIN y Diagnóstico Fan-Out para Excel -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface mb-1">Tipo de Cruce (JOIN)</label>
+                        <select id="selTipoJoinExcel" onchange="evaluarRiesgoClavesExcel()" class="w-full text-xs px-3 py-2 bg-white border border-outline-variant rounded-xl font-bold text-primary">
+                            <option value="LEFT">LEFT JOIN (Conserva todas las filas de Hoja A)</option>
+                            <option value="INNER">INNER JOIN (Solo coincidencias exactas)</option>
+                            <option value="FULL">FULL JOIN (ALL - Todos los registros de A y B)</option>
+                        </select>
+                    </div>
+                    <div class="md:col-span-2">
+                        <div id="panelDiagnosticoExcel" class="p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-slate-50 border-slate-200 text-slate-500">
+                            <span class="material-symbols-outlined text-base">info</span>
+                            <span>Define las condiciones de unión para calcular cardinalidad en DuckDB.</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mapeo Unificado de Columnas Multi-Hoja -->
+                <div class="space-y-3 pt-3 border-t border-outline-variant/40">
+                    <span class="text-xs font-bold text-on-surface uppercase tracking-wider block">
+                        Mapeo Unificado de Columnas Resultantes (Contrato OBT):
+                    </span>
+                    <div class="overflow-x-auto max-h-72">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr class="bg-surface-container text-on-surface-variant font-bold border-b border-outline-variant/50">
+                                    <th class="py-2.5 px-3">Hoja Origen</th>
+                                    <th class="py-2.5 px-3">Columna Original</th>
+                                    <th class="py-2.5 px-3">Nombre en Nuevo Cubo</th>
+                                    <th class="py-2.5 px-3">Clasificación Semántica</th>
+                                    <th class="py-2.5 px-3 text-center">Incluir</th>
+                                </tr>
+                            </thead>
+                            <tbody id="filasColumnasExcelMultiHoja" class="divide-y divide-outline-variant/30 text-on-surface">
+                                <!-- Inyectado dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <!-- Parámetros del Cubo y Guardar -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-outline-variant/40">
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface mb-1">Código del Cubo Multi-Hoja <span class="text-red-500">*</span></label>
+                        <input type="text" id="codigoCuboMultiHoja" placeholder="ej. cuboPolizasSiniestros" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-mono font-bold text-primary">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface mb-1">Nombre Descriptivo <span class="text-red-500">*</span></label>
+                        <input type="text" id="nombreCuboMultiHoja" placeholder="ej. Pólizas y Siniestros Cruzados" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface">
+                    </div>
+                </div>
+
+                <button type="button" onclick="ejecutarCruceExcelMultiHoja()" id="btnCrearExcelMultiHoja" class="btn-glow text-on-primary font-bold px-6 py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm w-full md:w-auto cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">rocket_launch</span>
+                    Generar Cubo Multi-Hoja OBT (ZSTD)
+                </button>
+            </div>
+
+            <!-- Modo 3: Configuración en Diagrama de Estrella (Star Schema) -->
+            <div id="seccionConfiguracionEstrella" class="hidden space-y-5 pt-2 border-t border-outline-variant/40">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <h4 class="font-display font-bold text-sm text-on-surface flex items-center gap-2">
+                            <span class="material-symbols-outlined text-purple-600">hub</span>
+                            Paso 2: Modelado en Diagrama de Estrella (Relacionar Cubos / Hojas)
+                        </h4>
+                        <p class="text-[11px] text-slate-500 mt-0.5">
+                            Relaciona la tabla central de hechos (hojas idénticas unificadas) con las tablas dimensionales detectadas.
+                        </p>
+                    </div>
+                    <span class="px-2.5 py-1 rounded-full bg-purple-100 text-purple-800 font-bold text-[11px] flex items-center gap-1">
+                        <span class="material-symbols-outlined text-xs">schema</span> Esquema Multidimensional
+                    </span>
+                </div>
+
+                <!-- Contenedor del Diagrama Visual de Estrella -->
+                <div class="p-5 rounded-2xl bg-gradient-to-br from-slate-50 to-purple-50/40 border border-purple-200/60 shadow-xs space-y-4">
+                    <div class="flex items-center justify-between border-b border-purple-100 pb-3">
+                        <span class="text-xs font-black uppercase text-purple-900 tracking-wide flex items-center gap-2">
+                            <span class="material-symbols-outlined text-purple-600">device_hub</span>
+                            Relaciones entre Cubo Central y Dimensiones
+                        </span>
+                        <span class="text-[11px] text-purple-700 font-bold" id="resumenEstrellaConteo">0 Dimensiones detectadas</span>
+                    </div>
+
+                    <!-- Nodo Central: Hechos / Fact Table -->
+                    <div class="p-4 rounded-xl bg-white border-2 border-primary/40 shadow-xs">
+                        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-xl bg-primary/10 text-primary flex items-center justify-center font-bold shrink-0">
+                                    <span class="material-symbols-outlined text-2xl">dataset</span>
+                                </div>
+                                <div>
+                                    <div class="flex items-center gap-2">
+                                        <span class="text-xs font-black uppercase text-primary tracking-wide">⭐ Tabla Central de Hechos (Fact Table)</span>
+                                        <span id="badgeHechosUnificadas" class="px-2 py-0.5 rounded-md bg-primary/10 text-primary text-[10px] font-bold font-mono">1 hoja</span>
+                                    </div>
+                                    <p class="text-[11px] text-slate-500 mt-0.5" id="descHechosUnificadas">Hojas consolidadas</p>
+                                </div>
+                            </div>
+                            <div class="text-left sm:text-right">
+                                <span class="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">Columnas Disponibles</span>
+                                <span class="font-bold text-xs text-primary" id="totalColsHechosBadge">0 columnas</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Dimensiones Satélites -->
+                    <div id="contenedorDimensionesEstrella" class="space-y-3">
+                        <!-- Inyectado dinámicamente: tarjeta interactiva por cada dimensión -->
+                    </div>
+                </div>
+
+                <!-- Parámetros del Cubo y Guardado Estrella -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 pt-3 border-t border-outline-variant/40">
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface mb-1">Código del Cubo Estrella <span class="text-red-500">*</span></label>
+                        <input type="text" id="codigoCuboEstrella" placeholder="ej. cuboEstrellaVentas" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-mono font-bold text-primary">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface mb-1">Nombre Descriptivo <span class="text-red-500">*</span></label>
+                        <input type="text" id="nombreCuboEstrella" placeholder="ej. Ventas con Dimensiones" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface mb-1">Modalidad de Ingesta</label>
+                        <select id="modalidadCuboEstrella" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface">
+                            <option value="ExcelModalidadA">Modalidad A (Histórico Acumulado)</option>
+                            <option value="ExcelModalidadB">Modalidad B (Validación en Sesión)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <button type="button" onclick="ejecutarCreacionCuboEstrella()" id="btnCrearExcelEstrella" class="btn-glow text-on-primary font-bold px-6 py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm w-full md:w-auto cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">hub</span>
+                    Generar Cubo Diagrama de Estrella OBT (ZSTD)
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pestaña 2: SQL en Vivo -->
+    <div id="pestana-sql" class="hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs space-y-4">
+            <h4 class="font-display font-bold text-sm text-on-surface flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary">terminal</span>
+                Consulta en Línea SQL / Stored Procedure
+            </h4>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Conexión Registrada</label>
+                    <select id="selectorConexionPredefinida" onchange="seleccionarConexionPredefinida(this)" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface">
+                        <option value="">-- Personalizada / Manual --</option>
+                        {% for c in conexiones %}
+                        <option value="{{ c.cadenaConexion }}" {% if loop.first %}selected{% endif %}>
+                            {{ c.nombreConexion }} ({{ c.motorBaseDatos }})
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Cadena de Conexión (SQLAlchemy / ODBC)</label>
+                    <input type="text" id="cadenaSql" value="{% if conexiones %}{{ conexiones[0].cadenaConexion }}{% else %}postgresql://postgres.flposnfuyrkenlhiguaq:Zaq12wsxcv%2B%2B123789456@aws-0-us-west-2.pooler.supabase.com:5432/postgres{% endif %}" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-mono text-on-surface">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider mb-1">Código de la Vista</label>
+                    <input type="text" id="codigoVistaSql" value="cubo_tickets_helpdesk" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-mono font-bold text-primary">
+                </div>
+            </div>
+            <div>
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+                    <label class="block text-xs font-bold text-on-surface-variant uppercase tracking-wider">Sentencia SQL / SP</label>
+                    <label class="inline-flex items-center gap-1.5 cursor-pointer text-xs font-semibold text-primary">
+                        <input type="checkbox" id="chkRemoverTopSql" checked class="rounded border-outline text-primary focus:ring-0">
+                        <span>Extraer dataset completo (Remover TOP / LIMIT al materializar)</span>
+                    </label>
+                </div>
+                <textarea id="consultaSql" rows="3" class="w-full bg-surface-container-low border border-outline-variant rounded-xl p-3 text-xs font-mono text-on-surface" oninput="detectarClausulaTopEnSql(this.value)">SELECT numero_ticket, usuario_solicitante, area_solicitante, tiempo_atencion_minutos, fecha_atencion, area_atendio, prioridad, estado, categoria_problema FROM ingesta_test</textarea>
+                <div id="alertaTopSql" class="hidden mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2">
+                    <span class="material-symbols-outlined text-sm text-blue-600">info</span>
+                    <span><b>Aviso de Muestreo:</b> Se detectó cláusula <code>TOP / LIMIT</code>. Se usará para previsualizar, pero al materializar el cubo se removerá automáticamente para extraer toda la data.</span>
+                </div>
+            </div>
+            <div class="flex flex-wrap items-center gap-3">
+                <button type="button" onclick="probarSql()" class="bg-primary text-on-primary font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-1.5 hover:bg-primary-container transition-all">
+                    <span class="material-symbols-outlined text-sm">play_arrow</span> Probar Muestra (TOP 10)
+                </button>
+                <button type="button" id="btnMaterializarSql" onclick="generarCuboDesdeSql()" class="hidden btn-glow text-on-primary font-bold px-5 py-2.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm transition-all">
+                    <span class="material-symbols-outlined text-sm">save</span> Generar y Materializar Cubo Parquet OBT
+                </button>
+            </div>
+            <div id="resultadoSql" class="hidden p-4 rounded-xl bg-surface-container-low border border-outline-variant/60 text-xs overflow-x-auto space-y-3"></div>
+        </div>
+    </div>
+
+    <!-- Pestaña 3: Diseñador de Esquema / Cubos Vacíos para Data Lake (ETLs Masivas) -->
+    <div id="pestana-datalake" class="hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs space-y-5">
+            <!-- Encabezado Informativo -->
+            <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-outline-variant/40 pb-4">
+                <div>
+                    <h4 class="font-display font-bold text-sm text-on-surface flex items-center gap-2">
+                        <span class="material-symbols-outlined text-primary">schema</span>
+                        Diseñador de Cubo Vacío para Data Lake / Procesos Masivos
+                    </h4>
+                    <p class="text-xs text-on-surface-variant mt-0.5">
+                        Define el contrato y esquema de columnas para generar un archivo Parquet columnar vacío con compresión ZSTD. Este cubo será alimentado directamente por ETLs externas de gran envergadura.
+                    </p>
+                </div>
+                <div class="flex items-center gap-2">
+                    <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                        <span class="material-symbols-outlined text-sm">cloud_sync</span>
+                        Alimentación por ETL Externa
+                    </span>
+                </div>
+            </div>
+
+            <!-- Paso 1: Identificación del Cubo -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/60">
+                <div>
+                    <label class="block text-xs font-bold text-on-surface mb-1">Nombre Descriptivo del Cubo <span class="text-red-500">*</span></label>
+                    <input type="text" id="dlNombreCubo" placeholder="Ej: Cubo Siniestros Masivo" oninput="generarCodigoDesdeNombreDl(this.value)" class="w-full bg-white border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface focus:ring-2 focus:ring-primary/20">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-on-surface mb-1">Código / Identificador Físico <span class="text-red-500">*</span></label>
+                    <div class="flex items-center">
+                        <input type="text" id="dlCodigoCubo" placeholder="cubo_siniestros_masivo" class="w-full bg-white border border-outline-variant rounded-l-xl px-3 py-2 text-xs font-mono font-bold text-primary focus:ring-2 focus:ring-primary/20">
+                        <span class="bg-surface-container border border-l-0 border-outline-variant rounded-r-xl px-3 py-2 text-xs font-mono text-outline">.parquet</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paso 2: Selector de Modo de Definición (Visual vs SQL DDL) -->
+            <div class="space-y-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 bg-surface-container-low p-1 rounded-xl border border-outline-variant/60">
+                        <button type="button" id="btnModoDlVisual" onclick="conmutarModoDl('visual')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 bg-white text-primary shadow-xs">
+                            <span class="material-symbols-outlined text-sm">view_list</span>
+                            Modo Constructor Visual
+                        </button>
+                        <button type="button" id="btnModoDlSql" onclick="conmutarModoDl('sql')" class="px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 text-on-surface-variant hover:text-primary">
+                            <span class="material-symbols-outlined text-sm">code</span>
+                            Modo SQL DDL (CREATE TABLE)
+                        </button>
+                    </div>
+
+                    <div id="controlesAuxiliaresVisual" class="flex items-center gap-2">
+                        <button type="button" onclick="agregarFilaColumnaDl()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-all flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">add</span>
+                            + Agregar Columna
+                        </button>
+                    </div>
+
+                    <div id="controlesAuxiliaresSql" class="hidden flex items-center gap-2">
+                        <button type="button" onclick="cargarEjemploDdlSql()" class="px-3 py-1.5 rounded-lg text-xs font-bold text-slate-600 bg-slate-100 hover:bg-slate-200 transition-all flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">description</span>
+                            Cargar Ejemplo DDL
+                        </button>
+                        <button type="button" onclick="interpretarDdlYPasarAVisual()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary text-white hover:bg-primary-container transition-all flex items-center gap-1">
+                            <span class="material-symbols-outlined text-sm">sync_alt</span>
+                            Interpretar y Pasar a Constructor
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Panel Modo Visual -->
+                <div id="panelDlVisual" class="space-y-3">
+                    <div class="overflow-x-auto max-h-80 rounded-xl border border-outline-variant/60 bg-white shadow-xs">
+                        <table class="w-full text-left border-collapse text-xs">
+                            <thead>
+                                <tr class="bg-surface-container text-on-surface-variant font-bold border-b border-outline-variant/50 sticky top-0 z-10">
+                                    <th class="py-2.5 px-3 w-10 text-center">#</th>
+                                    <th class="py-2.5 px-4">Nombre de Columna <span class="text-red-500">*</span></th>
+                                    <th class="py-2.5 px-4 w-48">Tipo de Dato DuckDB / Parquet</th>
+                                    <th class="py-2.5 px-4 w-52">Clasificación Semántica</th>
+                                    <th class="py-2.5 px-3 w-16 text-center">Acción</th>
+                                </tr>
+                            </thead>
+                            <tbody id="cuerpoColumnasDlVisual" class="divide-y divide-outline-variant/30 text-on-surface">
+                                <!-- Inyectado dinámicamente -->
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="flex items-center justify-between text-[11px] text-on-surface-variant">
+                        <span>Total columnas configuradas: <b id="conteoColumnasDl" class="text-primary font-mono">0</b></span>
+                        <span class="italic text-slate-400">Las columnas serán generadas con soporte para valores nulos (NULLable).</span>
+                    </div>
+                </div>
+
+                <!-- Panel Modo SQL DDL -->
+                <div id="panelDlSql" class="hidden space-y-3">
+                    <div class="space-y-1">
+                        <label class="block text-xs font-bold text-on-surface flex items-center justify-between">
+                            <span>Sentencia DDL SQL (<code>CREATE TABLE</code> o lista de columnas)</span>
+                            <span class="text-[11px] text-slate-400 font-normal">Soporta tipos VARCHAR, BIGINT, INTEGER, DOUBLE, DECIMAL(p,s), DATE, TIMESTAMP, BOOLEAN</span>
+                        </label>
+                        <textarea id="txtDdlSql" rows="7" class="w-full bg-slate-900 text-emerald-400 font-mono text-xs rounded-xl p-3 border border-slate-700 focus:ring-2 focus:ring-primary focus:outline-none" placeholder="CREATE TABLE cubo_siniestros (&#10;    id_siniestro BIGINT,&#10;    numero_poliza VARCHAR,&#10;    monto_reserva DECIMAL(18, 2),&#10;    fecha_ocurrencia DATE,&#10;    activo BOOLEAN&#10;);"></textarea>
+                    </div>
+                    <div id="feedbackDdlSql" class="hidden p-3 rounded-xl text-xs font-bold"></div>
+                </div>
+            </div>
+
+            <!-- Botón Principal de Creación -->
+            <div class="pt-4 border-t border-outline-variant/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div class="text-[11px] text-slate-500">
+                    <span class="material-symbols-outlined text-sm inline-block align-middle text-primary">info</span>
+                    El cubo quedará registrado en el catálogo relacional y no permitirá refrescos manuales en la interfaz.
+                </div>
+                <button type="button" id="btnCrearCuboVacioDl" onclick="ejecutarCreacionCuboVacioDl()" class="btn-glow text-on-primary font-bold px-6 py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm">
+                    <span class="material-symbols-outlined text-sm">save</span>
+                    Crear Cubo y Generar Parquet Vacío
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Pestaña 4: Cubo Compuesto (Enlace JOIN de Cubos con Detección Fan-Out) -->
+    <div id="pestana-compuesto" class="hidden space-y-6">
+        <div class="bg-white p-6 rounded-2xl border border-outline-variant/60 shadow-xs space-y-5">
+            <div>
+                <h4 class="font-display font-bold text-sm text-on-surface flex items-center gap-2">
+                    <span class="material-symbols-outlined text-primary">join_inner</span>
+                    Unificación y Enlace de Cubos (Cubo Compuesto OBT)
+                </h4>
+                <p class="text-xs text-on-surface-variant mt-0.5">Cruza dos cubos Parquet preexistentes con detección preventiva de duplicación (fan-out) y trazabilidad de orígenes.</p>
+            </div>
+
+            <!-- Paso 1: Selección de Orígenes A y B -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/60">
+                <!-- Origen A (Tabla Hechos / Principal) -->
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-black uppercase text-primary tracking-wide">
+                            🔷 Origen A (Tabla Hechos / Principal)
+                        </label>
+                        <span id="badgeOrigenA" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">Origen</span>
+                    </div>
+                    <select id="selCuboOrigenA" onchange="cargarMetadatosOrigenA()" class="w-full text-xs px-3 py-2 bg-white border border-outline-variant rounded-xl font-medium focus:ring-2 focus:ring-primary/20">
+                        <option value="">-- Selecciona el Origen A --</option>
+                    </select>
+                </div>
+
+                <!-- Origen B (Tabla Dimensional / Secundaria) -->
+                <div class="space-y-3">
+                    <div class="flex items-center justify-between">
+                        <label class="block text-xs font-black uppercase text-secondary tracking-wide">
+                            🔶 Origen B (Tabla Dimensional / Secundaria)
+                        </label>
+                        <span id="badgeOrigenB" class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600">Origen</span>
+                    </div>
+                    <select id="selCuboOrigenB" onchange="cargarMetadatosOrigenB()" class="w-full text-xs px-3 py-2 bg-white border border-outline-variant rounded-xl font-medium focus:ring-2 focus:ring-secondary/20">
+                        <option value="">-- Selecciona el Origen B --</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Paso 2: Condiciones de Cruce (Claves Compuestas / Multi-Key) -->
+            <div class="p-4 rounded-xl bg-surface-container-lowest border border-outline-variant/60 space-y-3">
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div>
+                        <label class="block text-xs font-black uppercase text-primary tracking-wide flex items-center gap-1.5">
+                            <span class="material-symbols-outlined text-base">link</span>
+                            Paso 2: Condiciones de Unión (Claves Compuestas)
+                        </label>
+                        <p class="text-[11px] text-on-surface-variant">
+                            Especifica los pares de columnas para el JOIN (ej: <code>nro_poliza</code> AND <code>endoso</code>).
+                        </p>
+                    </div>
+                    <button type="button" onclick="agregarFilaCondicionCompuesto()" class="px-3 py-1.5 rounded-lg text-xs font-bold bg-primary/10 text-primary hover:bg-primary/20 transition-all flex items-center gap-1.5 self-start">
+                        <span class="material-symbols-outlined text-sm">add_link</span>
+                        + Agregar Condición (AND)
+                    </button>
+                </div>
+
+                <div id="contenedorCondicionesCompuesto" class="space-y-2">
+                    <!-- Filas inyectadas dinámicamente -->
+                    <div class="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-400 text-center italic">
+                        Selecciona el Origen A y Origen B para cargar sus columnas clave.
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paso 3: Tipo de JOIN y Diagnóstico Preventivo de Fan-Out -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-center">
+                <div>
+                    <label class="block text-xs font-bold text-on-surface mb-1">Tipo de Cruce (JOIN)</label>
+                    <select id="selTipoJoin" onchange="evaluarRiesgoClaves()" class="w-full text-xs px-3 py-2 bg-white border border-outline-variant rounded-xl font-bold text-primary">
+                        <option value="LEFT">LEFT JOIN (Conserva todos los registros de A)</option>
+                        <option value="INNER">INNER JOIN (Solo coincidencias exactas)</option>
+                        <option value="FULL">FULL JOIN (ALL - Todos los registros de A y B)</option>
+                    </select>
+                </div>
+                <div class="md:col-span-2">
+                    <div id="panelDiagnosticoFanOut" class="p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-slate-50 border-slate-200 text-slate-500">
+                        <span class="material-symbols-outlined text-base">info</span>
+                        <span>Configura los orígenes y las claves de unión para analizar cardinalidad y riesgo de duplicación con DuckDB.</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Paso 3: Mapeo Unificado de Columnas y Resolución de Colisiones -->
+            <div id="seccionMapeoCompuesto" class="hidden space-y-4 pt-4 border-t border-outline-variant/40">
+                <div class="flex items-center justify-between">
+                    <span class="text-xs font-bold text-on-surface uppercase tracking-wider block">
+                        Mapeo Unificado de Columnas y Resolución de Colisiones:
+                    </span>
+                    <span class="text-[11px] text-slate-400">Las columnas repetidas se prefijan automáticamente para evitar ambigüedad.</span>
+                </div>
+
+                <div class="overflow-x-auto max-h-72">
+                    <table class="w-full text-left border-collapse text-xs">
+                        <thead>
+                            <tr class="bg-surface-container text-on-surface-variant font-bold border-b border-outline-variant/50">
+                                <th class="py-2.5 px-3">Origen</th>
+                                <th class="py-2.5 px-3">Columna Original</th>
+                                <th class="py-2.5 px-3">Nombre en Nuevo Cubo</th>
+                                <th class="py-2.5 px-3">Clasificación Semántica</th>
+                                <th class="py-2.5 px-3 text-center">Incluir</th>
+                            </tr>
+                        </thead>
+                        <tbody id="filasColumnasCompuesto" class="divide-y divide-outline-variant/30 text-on-surface">
+                            <!-- Inyectado por JS -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Paso 4: Parámetros Finales del Cubo y Guardado -->
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 pt-3 border-t border-outline-variant/40">
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface mb-1">Código del Cubo Compuesto <span class="text-red-500">*</span></label>
+                        <input type="text" id="codigoCuboCompuesto" value="cuboConsolidadoVentas" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-mono font-bold text-primary">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-on-surface mb-1">Nombre Descriptivo <span class="text-red-500">*</span></label>
+                        <input type="text" id="nombreCuboCompuesto" value="Cubo Consolidado de Ventas y Usuarios" class="w-full bg-surface-container-low border border-outline-variant rounded-xl px-3 py-2 text-xs font-bold text-on-surface">
+                    </div>
+                </div>
+
+                <button type="button" onclick="ejecutarCreacionCuboCompuesto()" id="btnCrearCompuesto" class="btn-glow text-on-primary font-bold px-6 py-3 rounded-xl text-xs flex items-center justify-center gap-2 shadow-sm w-full md:w-auto cursor-pointer">
+                    <span class="material-symbols-outlined text-sm">rocket_launch</span>
+                    Generar Cubo Compuesto OBT (ZSTD)
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_scripts %}
+<script>
+    let catalogoCubosGlobal = [];
+    let metadatosA = null;
+    let metadatosB = null;
+    let modoExcelActual = 'simple';
+    let datosExcelMultiHojas = null;
+    let analisisLibroGlobal = null;
+
+    function mostrarPestana(pestana) {
+        ['excel', 'sql', 'datalake', 'compuesto'].forEach(p => {
+            const el = document.getElementById(`pestana-${p}`);
+            if (el) el.classList.toggle('hidden', p !== pestana);
+            const btn = document.getElementById(`tabBtn-${p}`);
+            if (btn) {
+                if (p === pestana) {
+                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold transition-all bg-white text-primary shadow-xs flex items-center gap-1";
+                } else {
+                    btn.className = "px-3 py-1.5 rounded-lg text-xs font-bold transition-all text-on-surface-variant hover:text-on-surface flex items-center gap-1";
+                }
+            }
+        });
+
+        if (pestana === 'compuesto') {
+            cargarCatalogoCubos();
+        }
+    }
+
+    let columnasDetectadasActuales = [];
+
+    async function analizarArchivoExcel(hojaDeseada = null) {
+        const input = document.getElementById('inputExcel');
+        if (!input.files || !input.files[0]) return;
+
+        const archivo = input.files[0];
+        const alerta = document.getElementById('alertaExcel');
+        alerta.className = "p-3 rounded-xl bg-primary/10 text-primary text-xs flex items-center gap-2 border border-primary/20";
+        alerta.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">sync</span> Leyendo y analizando estructura del libro con Calamine Rust...`;
+        alerta.classList.remove('hidden');
+
+        const formData = new FormData();
+        formData.append('archivo', archivo);
+
+        try {
+            // Análisis estructural completo del libro Excel
+            const respCompleto = await fetch('/api/ingesta/excel/analizar-libro-completo', {
+                method: 'POST',
+                body: formData
+            });
+            const dataCompleto = await respCompleto.json();
+
+            if (dataCompleto.exito) {
+                analisisLibroGlobal = dataCompleto;
+
+                // 1. Selector de Hojas para Modo Simple
+                const selectorHojas = document.getElementById('selectorHojaExcel');
+                selectorHojas.innerHTML = '';
+                dataCompleto.todasLasHojas.forEach(h => {
+                    const opt = document.createElement('option');
+                    opt.value = h;
+                    opt.textContent = h;
+                    if (hojaDeseada ? h === hojaDeseada : (dataCompleto.hojasIdenticas && dataCompleto.hojasIdenticas.includes(h))) {
+                        opt.selected = true;
+                    }
+                    selectorHojas.appendChild(opt);
+                });
+
+                // Nombres sugeridos para cubo (limpieza y control de longitud)
+                const sinExt = archivo.name.replace(/\.[^/.]+$/, "");
+                let slugBase = sinExt.normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+                    .replace(/[^a-zA-Z0-9]+/g, "_")
+                    .replace(/^_+|_+$/g, "")
+                    .replace(/_+/g, "_");
+                if (slugBase.length > 35) {
+                    slugBase = slugBase.substring(0, 35).replace(/_+$/, "");
+                }
+                const baseCod = slugBase || "datosExcel";
+                let baseNom = sinExt.replace(/[^a-zA-Z0-9áéíóúÁÉÍÓÚñÑ ]+/g, " ").replace(/\s+/g, " ").trim();
+                if (baseNom.length > 80) baseNom = baseNom.substring(0, 80).trim();
+                const nombreFormateado = baseNom.charAt(0).toUpperCase() + baseNom.slice(1);
+
+                ['codigoCubo', 'codigoCuboEstrella', 'codigoCuboMultiHoja'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = `cubo_${baseCod}`;
+                });
+                ['nombreCubo', 'nombreCuboEstrella', 'nombreCuboMultiHoja'].forEach(id => {
+                    const el = document.getElementById(id);
+                    if (el) el.value = nombreFormateado;
+                });
+
+                // 2. Banner de Hojas Idénticas
+                const bannerId = document.getElementById('bannerHojasIdenticas');
+                const chipsContainer = document.getElementById('listaChipsHojasIdenticas');
+                if (dataCompleto.totalHojasIdenticas > 1) {
+                    bannerId.classList.remove('hidden');
+                    document.getElementById('tituloBannerIdenticas').innerHTML = `✨ Se detectaron <b>${dataCompleto.totalHojasIdenticas}</b> hojas con estructura idéntica de columnas`;
+                    document.getElementById('badgeConteoIdenticas').textContent = `${dataCompleto.totalHojasIdenticas} hojas unificables`;
+                    chipsContainer.innerHTML = '';
+                    dataCompleto.hojasIdenticas.forEach(h => {
+                        const chip = document.createElement('span');
+                        chip.className = "px-2 py-0.5 bg-emerald-100 border border-emerald-300 rounded text-[10px] font-mono font-bold text-emerald-800";
+                        chip.textContent = h;
+                        chipsContainer.appendChild(chip);
+                    });
+                } else {
+                    bannerId.classList.add('hidden');
+                }
+
+                // 3. Configuración de Columnas de Hechos
+                columnasDetectadasActuales = dataCompleto.columnasHechos;
+                renderizarColumnasContrato(dataCompleto.columnasHechos);
+
+                const hojaActiva = selectorHojas.value || dataCompleto.todasLasHojas[0];
+                const filasMuestra = (dataCompleto.detalleHojas[hojaActiva] && dataCompleto.detalleHojas[hojaActiva].filasMuestra) ? dataCompleto.detalleHojas[hojaActiva].filasMuestra.length : 0;
+                document.getElementById('textoResumenHoja').innerHTML = `Hojas del libro: <b>${dataCompleto.totalHojas}</b> | Hojas idénticas identificadas: <b>${dataCompleto.totalHojasIdenticas}</b>`;
+                document.getElementById('badgeTotalFilas').textContent = `${dataCompleto.totalHojasIdenticas} hoja(s) unificadas`;
+
+                // 4. Configurar opciones del selector de modos
+                const contModo = document.getElementById('contenedorModoExcel');
+                const btnEstrella = document.getElementById('btnModoExcelEstrella');
+
+                if (dataCompleto.totalHojas > 1) {
+                    contModo.classList.remove('hidden');
+                    prepararOpcionesMultiHoja(archivo, dataCompleto.todasLasHojas);
+
+                    if (dataCompleto.totalHojasDimensionales > 0) {
+                        btnEstrella.classList.remove('hidden');
+                        renderizarDiagramaEstrella(dataCompleto);
+                        // Sugerir modo estrella si hay dimensiones dispares
+                        cambiarModoExcel('estrella');
+                    } else {
+                        btnEstrella.classList.add('hidden');
+                        cambiarModoExcel('simple');
+                    }
+                } else {
+                    contModo.classList.add('hidden');
+                    btnEstrella.classList.add('hidden');
+                    cambiarModoExcel('simple');
+                }
+
+                alerta.className = "p-3 rounded-xl bg-secondary/10 text-secondary text-xs flex items-center gap-2 border border-secondary/20";
+                alerta.innerHTML = `<span class="material-symbols-outlined text-sm">check_circle</span> Libro analizado con éxito. ${dataCompleto.totalHojas} hoja(s) procesadas (${dataCompleto.totalHojasIdenticas} unificables, ${dataCompleto.totalHojasDimensionales} dimensionales).`;
+            } else {
+                alerta.className = "p-3 rounded-xl bg-error/10 text-error text-xs flex items-center gap-2 border border-error/20";
+                alerta.innerHTML = `<span class="material-symbols-outlined text-sm">error</span> ${dataCompleto.error || 'Error al procesar libro'}`;
+            }
+        } catch(e) {
+            console.error(e);
+            alerta.className = "p-3 rounded-xl bg-error/10 text-error text-xs flex items-center gap-2 border border-error/20";
+            alerta.innerHTML = `<span class="material-symbols-outlined text-sm">error</span> Fallo de comunicación con el servidor: ${e.message}`;
+        }
+    }
+
+    function cambiarHojaExcel() {
+        const selector = document.getElementById('selectorHojaExcel');
+        if (selector && selector.value && analisisLibroGlobal) {
+            const hoja = selector.value;
+            if (analisisLibroGlobal.detalleHojas[hoja]) {
+                const cols = analisisLibroGlobal.detalleHojas[hoja].columnas;
+                columnasDetectadasActuales = cols;
+                renderizarColumnasContrato(cols);
+            }
+        }
+    }
+
+
+    function normalizarTipoDato(tipoOriginal) {
+        if (!tipoOriginal) return 'VARCHAR';
+        const t = tipoOriginal.toString().toUpperCase();
+        if (t.includes('INT') || t.includes('LONG') || t.includes('BYTE') || t.includes('SHORT')) return 'ENTERO';
+        if (t.includes('FLOAT') || t.includes('DOUBLE') || t.includes('DECIMAL') || t.includes('NUMERIC') || t.includes('REAL')) return 'DECIMAL';
+        if (t.includes('DATE') || t.includes('TIME') || t.includes('TIMESTAMP')) return 'FECHA';
+        if (t.includes('BOOL')) return 'BOOLEANO';
+        return 'VARCHAR';
+    }
+
+    function renderizarColumnasContrato(columnas) {
+        const tbody = document.getElementById('filasColumnasContrato');
+        tbody.innerHTML = '';
+        columnas.forEach((c, idx) => {
+            const tipoNorm = normalizarTipoDato(c.tipo);
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-surface-container-low/50 transition-colors";
+            tr.innerHTML = `
+                <td class="py-2 px-3 font-mono font-bold text-primary">${c.nombre}</td>
+                <td class="py-2 px-3">
+                    <select id="tipoDato_${idx}" class="bg-white border border-outline-variant rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-800">
+                        <option value="VARCHAR" ${tipoNorm === 'VARCHAR' ? 'selected' : ''}>VARCHAR (Texto)</option>
+                        <option value="ENTERO" ${tipoNorm === 'ENTERO' ? 'selected' : ''}>ENTERO (Int64)</option>
+                        <option value="DECIMAL" ${tipoNorm === 'DECIMAL' ? 'selected' : ''}>DECIMAL (Numérico)</option>
+                        <option value="FECHA" ${tipoNorm === 'FECHA' ? 'selected' : ''}>FECHA (Temporal)</option>
+                        <option value="BOOLEANO" ${tipoNorm === 'BOOLEANO' ? 'selected' : ''}>BOOLEANO (Lógico)</option>
+                    </select>
+                </td>
+                <td class="py-2 px-3">
+                    <select id="clasif_${idx}" class="bg-white border border-outline-variant rounded-lg px-2 py-1 text-xs font-bold text-on-surface">
+                        <option value="Categorica/Dimension" ${c.clasificacion === 'Categorica/Dimension' ? 'selected' : ''}>Categorica/Dimension</option>
+                        <option value="MetricaSumable" ${c.clasificacion === 'MetricaSumable' ? 'selected' : ''}>MetricaSumable (SUM)</option>
+                        <option value="MetricaNoSumable" ${c.clasificacion === 'MetricaNoSumable' ? 'selected' : ''}>MetricaNoSumable (AVG/MAX)</option>
+                        <option value="Identificador" ${c.clasificacion === 'Identificador/Descarte' || c.clasificacion === 'Identificador' ? 'selected' : ''}>Identificador (Clave/Caso)</option>
+                    </select>
+                </td>
+                <td class="py-2 px-3 text-center">
+                    <input type="checkbox" id="req_${idx}" checked class="rounded text-primary focus:ring-0">
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function guardarYGenerarParquet() {
+        const input = document.getElementById('inputExcel');
+        if (!input.files || !input.files[0]) {
+            mostrarModalAlerta({
+                titulo: 'Archivo Requerido',
+                mensaje: 'Por favor selecciona un archivo Excel (.xlsx).',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const codigo = document.getElementById('codigoCubo').value.trim();
+        const nombre = document.getElementById('nombreCubo').value.trim();
+        const modalidad = document.getElementById('modalidadCubo').value;
+        const selectorHoja = document.getElementById('selectorHojaExcel');
+        const hoja = selectorHoja ? selectorHoja.value : '';
+
+        if (!codigo || !nombre) {
+            mostrarModalAlerta({
+                titulo: 'Campos Obligatorios',
+                mensaje: 'Debe ingresar un Código de Cubo y un Nombre Descriptivo válidos.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const configColumnas = columnasDetectadasActuales.map((c, idx) => {
+            const selClasif = document.getElementById(`clasif_${idx}`);
+            const selTipo = document.getElementById(`tipoDato_${idx}`) || document.getElementById(`tipo_${idx}`);
+            const clasifVal = selClasif ? selClasif.value : (c.clasificacionSemantica || c.clasificacion || "Categorica/Dimension");
+            const tipoVal = selTipo ? selTipo.value : (c.tipoDato || c.tipo || "VARCHAR");
+            return {
+                nombre: c.nombre,
+                clasificacionSemantica: clasifVal,
+                clasificacion: clasifVal,
+                tipoDato: tipoVal,
+                tipo: tipoVal
+            };
+        });
+
+        const formData = new FormData();
+        formData.append('archivo', input.files[0]);
+        formData.append('codigoCubo', codigo);
+        formData.append('nombreCubo', nombre);
+        formData.append('codigoVista', codigo);
+        formData.append('nombreVista', nombre);
+        formData.append('modalidad', modalidad);
+        formData.append('hoja', hoja);
+        formData.append('nombreHoja', hoja);
+        formData.append('configuracionColumnasJson', JSON.stringify(configColumnas));
+        formData.append('configuracionColumnas', JSON.stringify(configColumnas));
+
+        if (analisisLibroGlobal && Array.isArray(analisisLibroGlobal.hojasIdenticas) && analisisLibroGlobal.hojasIdenticas.length > 1) {
+            formData.append('hojasUnificarJson', JSON.stringify(analisisLibroGlobal.hojasIdenticas));
+        }
+
+        const rolDefecto = document.getElementById('rolPorDefectoExcel') ? document.getElementById('rolPorDefectoExcel').value : null;
+        if (rolDefecto) {
+            formData.append('rolPorDefectoId', rolDefecto);
+        }
+
+        const alerta = document.getElementById('alertaExcel');
+        const btn = document.getElementById('btnGuardarExcel') || document.querySelector('button[onclick="guardarYGenerarParquet()"]');
+        if (btn) {
+            btn.disabled = true;
+            btn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">sync</span> Procesando e Ingestando Cubo Parquet...`;
+        }
+        if (alerta) {
+            alerta.className = "p-3 rounded-xl bg-primary/10 text-primary text-xs flex items-center gap-2 border border-primary/20";
+            alerta.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">sync</span> Leyendo datos con Calamine Rust y generando archivo Parquet (compresión ZSTD)...`;
+            alerta.classList.remove('hidden');
+        }
+
+        try {
+            const resp = await fetch('/api/ingesta/procesar-excel', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                if (alerta) {
+                    alerta.className = "p-3 rounded-xl bg-emerald-50 text-emerald-800 text-xs flex items-center gap-2 border border-emerald-200";
+                    alerta.innerHTML = `<span class="material-symbols-outlined text-sm">check_circle</span> Cubo creado y materializado exitosamente (${data.totalFilas} filas, ${data.totalColumnas} columnas).`;
+                }
+                const mensajeUnif = (analisisLibroGlobal && analisisLibroGlobal.hojasIdenticas && analisisLibroGlobal.hojasIdenticas.length > 1)
+                    ? ` (Unificadas ${analisisLibroGlobal.hojasIdenticas.length} hojas)`
+                    : '';
+                mostrarModalExitoCubo({
+                    idCubo: data.idCubo,
+                    nombreCubo: data.nombreCubo || codigo,
+                    totalFilas: data.totalFilas,
+                    totalColumnas: data.totalColumnas,
+                    mensajeExtra: mensajeUnif
+                });
+            } else {
+                if (alerta) {
+                    alerta.className = "p-3 rounded-xl bg-red-50 text-red-800 text-xs flex items-center gap-2 border border-red-200";
+                    alerta.innerHTML = `<span class="material-symbols-outlined text-sm">error</span> ${data.error || 'Error al guardar cubo'}`;
+                }
+                mostrarModalAlerta({
+                    titulo: 'Error al Guardar Cubo',
+                    mensaje: data.error || 'Fallo desconocido',
+                    tipo: 'error'
+                });
+            }
+        } catch(e) {
+            console.error(e);
+            if (alerta) {
+                alerta.className = "p-3 rounded-xl bg-red-50 text-red-800 text-xs flex items-center gap-2 border border-red-200";
+                alerta.innerHTML = `<span class="material-symbols-outlined text-sm">error</span> ${e.message}`;
+            }
+            mostrarModalAlerta({
+                titulo: 'Error de Conexión',
+                mensaje: e.message,
+                tipo: 'error'
+            });
+        } finally {
+            if (btn) {
+                btn.disabled = false;
+                btn.innerHTML = `<span class="material-symbols-outlined text-sm">save</span> Guardar Contrato y Generar Cubo Parquet OBT`;
+            }
+        }
+    }
+
+    // =========================================================================
+    // EXCEL: CONMUTACIÓN DE MODOS (SIMPLE, ESTRELLA, MULTI-HOJA)
+    // =========================================================================
+    function cambiarModoExcel(modo) {
+        modoExcelActual = modo;
+        const btnSimple = document.getElementById('btnModoExcelSimple');
+        const btnEstrella = document.getElementById('btnModoExcelEstrella');
+        const btnMulti = document.getElementById('btnModoExcelMultiHoja');
+
+        const secSimple = document.getElementById('seccionConfiguracion');
+        const secEstrella = document.getElementById('seccionConfiguracionEstrella');
+        const secMulti = document.getElementById('seccionConfiguracionMultiHoja');
+
+        // Reset estilos botones
+        [btnSimple, btnEstrella, btnMulti].forEach(btn => {
+            if (btn) btn.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all text-slate-600 hover:text-primary flex items-center gap-1";
+        });
+        [secSimple, secEstrella, secMulti].forEach(sec => {
+            if (sec) sec.classList.add('hidden');
+        });
+
+        if (modo === 'simple') {
+            btnSimple.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-primary text-white shadow-xs";
+            secSimple.classList.remove('hidden');
+        } else if (modo === 'estrella') {
+            btnEstrella.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-purple-700 text-white shadow-xs flex items-center gap-1";
+            secEstrella.classList.remove('hidden');
+        } else if (modo === 'multihoja') {
+            btnMulti.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-primary text-white shadow-xs flex items-center gap-1";
+            secMulti.classList.remove('hidden');
+            if (datosExcelMultiHojas && datosExcelMultiHojas.hojas) {
+                alCambiarHojasMulti();
+            }
+        }
+    }
+
+    // =========================================================================
+    // MODELADO EN DIAGRAMA DE ESTRELLA (STAR SCHEMA)
+    // =========================================================================
+    function renderizarDiagramaEstrella(analisis) {
+        if (!analisis) return;
+
+        // 1. Nodo Hechos Central
+        const badgeHechos = document.getElementById('badgeHechosUnificadas');
+        const descHechos = document.getElementById('descHechosUnificadas');
+        const totalColsBadge = document.getElementById('totalColsHechosBadge');
+
+        badgeHechos.textContent = `${analisis.totalHojasIdenticas} hoja(s) unificadas`;
+        if (analisis.totalHojasIdenticas > 1) {
+            descHechos.textContent = `Consolidado automático de: ${analisis.hojasIdenticas.slice(0, 4).join(', ')}${analisis.totalHojasIdenticas > 4 ? '...' : ''}`;
+        } else {
+            descHechos.textContent = `Hoja base: ${analisis.hojasIdenticas[0] || 'Hoja1'}`;
+        }
+        totalColsBadge.textContent = `${analisis.columnasHechos.length} columnas`;
+
+        document.getElementById('resumenEstrellaConteo').textContent = `${analisis.totalHojasDimensionales} Dimensión(es) a relacionar`;
+
+        // 2. Renderizar cada Dimensión Satélite
+        const contenedor = document.getElementById('contenedorDimensionesEstrella');
+        contenedor.innerHTML = '';
+
+        analisis.hojasDimensionales.forEach((dim, idx) => {
+            const nomDim = dim.nombreHoja;
+            const card = document.createElement('div');
+            card.className = "p-4 rounded-xl bg-white border border-purple-200/80 shadow-xs space-y-3";
+
+            // Encontrar llaves candidatas preseleccionadas
+            const llavesCand = (analisis.llavesCandidatas && analisis.llavesCandidatas[nomDim]) || [];
+            const llaveSugerida = llavesCand.length > 0 ? llavesCand[0] : null;
+
+            // Opciones de Hechos
+            let optsHechos = '';
+            analisis.columnasHechos.forEach(cH => {
+                const sel = (llaveSugerida && llaveSugerida.claveHechos === cH.nombre) ? 'selected' : '';
+                optsHechos += `<option value="${cH.nombre}" ${sel}>${cH.nombre} (${cH.tipo})</option>`;
+            });
+
+            // Opciones de Dimensión
+            let optsDim = '';
+            dim.columnas.forEach(cD => {
+                const sel = (llaveSugerida && llaveSugerida.claveDimension === cD.nombre) ? 'selected' : '';
+                optsDim += `<option value="${cD.nombre}" ${sel}>${cD.nombre} (${cD.tipo})</option>`;
+            });
+
+            // Filas de Columnas de Dimensión
+            let filasColsDim = '';
+            dim.columnas.forEach((cD, cIdx) => {
+                filasColsDim += `
+                    <label class="flex items-center gap-2 p-1.5 rounded-lg hover:bg-purple-50/50 cursor-pointer text-xs">
+                        <input type="checkbox" id="chk_dim_${idx}_${cIdx}" checked data-nombre-orig="${cD.nombre}" data-clasif="${cD.clasificacion}" class="rounded text-purple-600 focus:ring-0">
+                        <span class="font-mono font-bold text-slate-700">${cD.nombre}</span>
+                        <span class="text-[10px] text-slate-400">(${cD.tipo})</span>
+                    </label>
+                `;
+            });
+
+            card.innerHTML = `
+                <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-purple-100 pb-2.5">
+                    <div class="flex items-center gap-2">
+                        <span class="w-6 h-6 rounded-lg bg-purple-100 text-purple-700 font-bold text-xs flex items-center justify-center">${idx + 1}</span>
+                        <div>
+                            <span class="font-bold text-xs text-purple-950">🔶 Dimensión: ${nomDim}</span>
+                            <span class="text-[10px] text-slate-400 block">${dim.totalColumnas} columnas disponibles</span>
+                        </div>
+                    </div>
+                    ${llaveSugerida ? `<span class="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold flex items-center gap-1 self-start sm:self-auto"><span class="material-symbols-outlined text-[12px]">auto_fix_high</span> Llave Coincidente Auto-detectada</span>` : ''}
+                </div>
+
+                <!-- Selectores de Relación Hechos <-> Dimensión -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3 bg-purple-50/40 p-3 rounded-xl border border-purple-100">
+                    <div>
+                        <label class="block text-[11px] font-bold text-primary mb-1 uppercase tracking-wider">🔷 Clave en Hechos</label>
+                        <select id="selEstrellaKeyHechos_${idx}" class="w-full bg-white border border-outline-variant rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800">
+                            ${optsHechos}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-purple-800 mb-1 uppercase tracking-wider">🔶 Clave en ${nomDim}</label>
+                        <select id="selEstrellaKeyDim_${idx}" class="w-full bg-white border border-outline-variant rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800">
+                            ${optsDim}
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-[11px] font-bold text-slate-600 mb-1 uppercase tracking-wider">Tipo de Relación (JOIN)</label>
+                        <select id="selEstrellaTipoJoin_${idx}" class="w-full bg-white border border-outline-variant rounded-lg px-2.5 py-1.5 text-xs font-bold text-slate-800">
+                            <option value="LEFT" selected>LEFT JOIN (Conserva todos los Hechos)</option>
+                            <option value="INNER">INNER JOIN (Solo coincidencias)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <!-- Columnas a Proyectar -->
+                <details class="text-xs pt-1">
+                    <summary class="font-bold text-purple-700 hover:text-purple-900 cursor-pointer flex items-center gap-1">
+                        <span class="material-symbols-outlined text-sm">view_column</span>
+                        Seleccionar columnas a incorporar de '${nomDim}'
+                    </summary>
+                    <div class="grid grid-cols-2 sm:grid-cols-3 gap-1.5 mt-2 p-2 bg-white rounded-lg border border-purple-100 max-h-36 overflow-y-auto">
+                        ${filasColsDim}
+                    </div>
+                </details>
+            `;
+
+            contenedor.appendChild(card);
+        });
+    }
+
+    async function ejecutarCreacionCuboEstrella() {
+        const input = document.getElementById('inputExcel');
+        if (!input.files || !input.files[0]) {
+            mostrarModalAlerta({
+                titulo: 'Archivo Requerido',
+                mensaje: 'Por favor selecciona un archivo Excel válido.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const codigo = document.getElementById('codigoCuboEstrella').value.trim();
+        const nombre = document.getElementById('nombreCuboEstrella').value.trim();
+        const modalidad = document.getElementById('modalidadCuboEstrella').value;
+        const elRol = document.getElementById('rolDefectoEstrella');
+        const rolDefecto = elRol ? elRol.value : '';
+
+        if (!codigo || !nombre) {
+            mostrarModalAlerta({
+                titulo: 'Campos Obligatorios',
+                mensaje: 'Por favor ingresa un Código y Nombre para el Cubo Estrella.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        if (!analisisLibroGlobal) {
+            mostrarModalAlerta({
+                titulo: 'Análisis Pendiente',
+                mensaje: 'No se ha analizado el libro Excel.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        // Construir relaciones
+        const relaciones = [];
+        const columnasMapeadas = [];
+
+        // 1. Columnas de Hechos
+        analisisLibroGlobal.columnasHechos.forEach(cH => {
+            columnasMapeadas.push({
+                origen: "HECHOS",
+                nombreOriginal: cH.nombre,
+                nombreFinal: cH.nombre,
+                clasificacionSemantica: cH.clasificacion,
+                esObligatoria: true
+            });
+        });
+
+        // 2. Relaciones y columnas de cada Dimensión
+        analisisLibroGlobal.hojasDimensionales.forEach((dim, idx) => {
+            const nomDim = dim.nombreHoja;
+            const selHechos = document.getElementById(`selEstrellaKeyHechos_${idx}`);
+            const selDim = document.getElementById(`selEstrellaKeyDim_${idx}`);
+            const selJoin = document.getElementById(`selEstrellaTipoJoin_${idx}`);
+
+            if (selHechos && selDim && selJoin) {
+                relaciones.push({
+                    nombreDimension: nomDim,
+                    claveHechos: selHechos.value,
+                    claveDimension: selDim.value,
+                    tipoJoin: selJoin.value
+                });
+            }
+
+            // Columnas seleccionadas de esta dimensión
+            dim.columnas.forEach((cD, cIdx) => {
+                const chk = document.getElementById(`chk_dim_${idx}_${cIdx}`);
+                if (chk && chk.checked) {
+                    columnasMapeadas.push({
+                        origen: nomDim,
+                        nombreOriginal: cD.nombre,
+                        nombreFinal: `${nomDim}_${cD.nombre}`,
+                        clasificacionSemantica: cD.clasificacion,
+                        esObligatoria: true
+                    });
+                }
+            });
+        });
+
+        const btn = document.getElementById('btnCrearExcelEstrella');
+        btn.disabled = true;
+        btn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">sync</span> Generando Diagrama de Estrella en DuckDB ZSTD...`;
+
+        const formData = new FormData();
+        formData.append('archivo', input.files[0]);
+        formData.append('codigoVista', codigo);
+        formData.append('nombreVista', nombre);
+        formData.append('modalidad', modalidad);
+        formData.append('rolDefecto', rolDefecto);
+        formData.append('hojasUnificarJson', JSON.stringify(analisisLibroGlobal.hojasIdenticas || []));
+        formData.append('relacionesJson', JSON.stringify(relaciones));
+        formData.append('configuracionColumnasJson', JSON.stringify(columnasMapeadas));
+
+        try {
+            const resp = await fetch('/api/ingesta/excel/procesar-estrella', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                mostrarModalExitoCubo({
+                    idCubo: data.idCubo,
+                    nombreCubo: data.nombreCubo || codigo,
+                    totalFilas: data.totalFilas,
+                    totalColumnas: data.totalColumnas
+                });
+            } else {
+                mostrarModalAlerta({
+                    titulo: 'Error al Crear Cubo Estrella',
+                    mensaje: data.error || 'Fallo desconocido',
+                    tipo: 'error'
+                });
+            }
+        } catch(e) {
+            console.error(e);
+            mostrarModalAlerta({
+                titulo: 'Error de Conexión',
+                mensaje: e.message,
+                tipo: 'error'
+            });
+        } finally {
+            btn.disabled = false;
+            btn.innerHTML = `<span class="material-symbols-outlined text-sm">hub</span> Generar Cubo Diagrama de Estrella OBT (ZSTD)`;
+        }
+    }
+
+    // =========================================================================
+    // EXCEL MULTI-HOJA CON JOIN RELACIONAL
+    // =========================================================================
+    let contadorCondicionesExcel = 0;
+
+    function cambiarModoExcel(modo) {
+        modoExcelActual = modo;
+        const btnSimple = document.getElementById('btnModoExcelSimple');
+        const btnMulti = document.getElementById('btnModoExcelMultiHoja');
+        const secSimple = document.getElementById('seccionConfiguracion');
+        const secMulti = document.getElementById('seccionConfiguracionMultiHoja');
+
+        if (modo === 'simple') {
+            btnSimple.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-primary text-white shadow-xs";
+            btnMulti.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all text-slate-600 hover:text-primary flex items-center gap-1";
+            secSimple.classList.remove('hidden');
+            secMulti.classList.add('hidden');
+        } else {
+            btnMulti.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all bg-primary text-white shadow-xs flex items-center gap-1";
+            btnSimple.className = "px-3 py-1.5 rounded-md text-xs font-bold transition-all text-slate-600 hover:text-primary";
+            secSimple.classList.add('hidden');
+            secMulti.classList.remove('hidden');
+            if (datosExcelMultiHojas && datosExcelMultiHojas.hojas) {
+                alCambiarHojasMulti();
+            }
+        }
+    }
+
+    async function prepararOpcionesMultiHoja(archivo, hojas) {
+        const formData = new FormData();
+        formData.append('archivo', archivo);
+
+        try {
+            const resp = await fetch('/api/ingesta/excel/analizar-hojas', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                datosExcelMultiHojas = data;
+                const selA = document.getElementById('selHojaMultiA');
+                const selB = document.getElementById('selHojaMultiB');
+                selA.innerHTML = '';
+                selB.innerHTML = '';
+
+                data.hojas.forEach((h, idx) => {
+                    const optA = document.createElement('option');
+                    optA.value = h;
+                    optA.textContent = h;
+                    if (idx === 0) optA.selected = true;
+                    selA.appendChild(optA);
+
+                    const optB = document.createElement('option');
+                    optB.value = h;
+                    optB.textContent = h;
+                    if (idx === 1 || (data.hojas.length === 1 && idx === 0)) optB.selected = true;
+                    selB.appendChild(optB);
+                });
+
+                alCambiarHojasMulti();
+            }
+        } catch (e) {
+            console.error("Error analizando hojas múltiples:", e);
+        }
+    }
+
+    function alCambiarHojasMulti() {
+        if (!datosExcelMultiHojas || !datosExcelMultiHojas.detalleHojas) return;
+
+        const hojaA = document.getElementById('selHojaMultiA').value;
+        const hojaB = document.getElementById('selHojaMultiB').value;
+
+        const infoA = datosExcelMultiHojas.detalleHojas[hojaA];
+        const infoB = datosExcelMultiHojas.detalleHojas[hojaB];
+
+        const resA = document.getElementById('resumenHojaMultiA');
+        const resB = document.getElementById('resumenHojaMultiB');
+
+        if (resA && infoA) {
+            resA.textContent = `${infoA.totalColumnas} columnas detectadas.`;
+        }
+        if (resB && infoB) {
+            resB.textContent = `${infoB.totalColumnas} columnas detectadas.`;
+        }
+
+        const codigoEl = document.getElementById('codigoCuboMultiHoja');
+        const nombreEl = document.getElementById('nombreCuboMultiHoja');
+        if (codigoEl && !codigoEl.value) {
+            const cleanA = (hojaA || 'A').replace(/[^a-zA-Z0-9]/g, '_');
+            const cleanB = (hojaB || 'B').replace(/[^a-zA-Z0-9]/g, '_');
+            codigoEl.value = `cubo_${cleanA}_${cleanB}`;
+        }
+        if (nombreEl && !nombreEl.value) {
+            nombreEl.value = `${hojaA || 'HojaA'} y ${hojaB || 'HojaB'} Relacionados`;
+        }
+
+        const contenedor = document.getElementById('contenedorCondicionesExcel');
+        if (contenedor.children.length === 0) {
+            agregarFilaCondicionExcel();
+        } else {
+            actualizarOpcionesColumnasCondicionesExcel();
+        }
+
+        sincronizarMapeoColumnasExcelMulti();
+        evaluarRiesgoClavesExcel();
+    }
+
+    function agregarFilaCondicionExcel(colASugerida = '', colBSugerida = '') {
+        const contenedor = document.getElementById('contenedorCondicionesExcel');
+        const id = ++contadorCondicionesExcel;
+
+        const div = document.createElement('div');
+        div.id = `filaCondicionExcel_${id}`;
+        div.className = "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-2.5 bg-white rounded-xl border border-outline-variant/60 shadow-xs";
+
+        div.innerHTML = `
+            <div class="flex-1">
+                <label class="block text-[10px] font-bold text-primary uppercase mb-1">Columna Hoja A</label>
+                <select id="selCondExcelA_${id}" onchange="evaluarRiesgoClavesExcel()" class="w-full text-xs px-2.5 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg font-mono font-bold text-slate-800 focus:ring-1 focus:ring-primary">
+                </select>
+            </div>
+            <div class="self-center sm:pt-4 text-center">
+                <span class="px-2 py-1 rounded bg-slate-100 font-mono font-bold text-slate-500 text-xs">=</span>
+            </div>
+            <div class="flex-1">
+                <label class="block text-[10px] font-bold text-secondary uppercase mb-1">Columna Hoja B</label>
+                <select id="selCondExcelB_${id}" onchange="evaluarRiesgoClavesExcel()" class="w-full text-xs px-2.5 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg font-mono font-bold text-slate-800 focus:ring-1 focus:ring-secondary">
+                </select>
+            </div>
+            <div class="sm:pt-4 flex justify-end">
+                <button type="button" onclick="eliminarFilaCondicionExcel(${id})" title="Eliminar condición" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+        `;
+
+        contenedor.appendChild(div);
+        poblarOpcionesFilaCondicionExcel(id, colASugerida, colBSugerida);
+    }
+
+    function eliminarFilaCondicionExcel(id) {
+        const fila = document.getElementById(`filaCondicionExcel_${id}`);
+        if (fila) fila.remove();
+        evaluarRiesgoClavesExcel();
+    }
+
+    function poblarOpcionesFilaCondicionExcel(id, colASugerida = '', colBSugerida = '') {
+        if (!datosExcelMultiHojas || !datosExcelMultiHojas.detalleHojas) return;
+
+        const hojaA = document.getElementById('selHojaMultiA').value;
+        const hojaB = document.getElementById('selHojaMultiB').value;
+        const infoA = datosExcelMultiHojas.detalleHojas[hojaA];
+        const infoB = datosExcelMultiHojas.detalleHojas[hojaB];
+
+        const selA = document.getElementById(`selCondExcelA_${id}`);
+        const selB = document.getElementById(`selCondExcelB_${id}`);
+
+        if (selA && infoA) {
+            selA.innerHTML = '<option value="">-- Columna Clave A --</option>';
+            infoA.columnas.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.nombre;
+                opt.textContent = `${c.nombre} (${c.tipo})`;
+                if (c.nombre === colASugerida) opt.selected = true;
+                selA.appendChild(opt);
+            });
+        }
+
+        if (selB && infoB) {
+            selB.innerHTML = '<option value="">-- Columna Clave B --</option>';
+            infoB.columnas.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.nombre;
+                opt.textContent = `${c.nombre} (${c.tipo})`;
+                if (c.nombre === colBSugerida) opt.selected = true;
+                selB.appendChild(opt);
+            });
+        }
+
+        if (!colASugerida && !colBSugerida && infoA && infoB) {
+            const colsA = infoA.columnas.map(c => c.nombre);
+            const colsB = infoB.columnas.map(c => c.nombre);
+            const comunes = colsA.filter(c => colsB.includes(c));
+            if (comunes.length > 0) {
+                if (selA) selA.value = comunes[0];
+                if (selB) selB.value = comunes[0];
+            }
+        }
+    }
+
+    function actualizarOpcionesColumnasCondicionesExcel() {
+        const contenedor = document.getElementById('contenedorCondicionesExcel');
+        const filas = contenedor.querySelectorAll('[id^="filaCondicionExcel_"]');
+        filas.forEach(fila => {
+            const id = fila.id.replace('filaCondicionExcel_', '');
+            const selA = document.getElementById(`selCondExcelA_${id}`);
+            const selB = document.getElementById(`selCondExcelB_${id}`);
+            const valA = selA ? selA.value : '';
+            const valB = selB ? selB.value : '';
+            poblarOpcionesFilaCondicionExcel(id, valA, valB);
+        });
+    }
+
+    function obtenerCondicionesExcel() {
+        const contenedor = document.getElementById('contenedorCondicionesExcel');
+        const filas = contenedor.querySelectorAll('[id^="filaCondicionExcel_"]');
+        const condiciones = [];
+
+        filas.forEach(fila => {
+            const id = fila.id.replace('filaCondicionExcel_', '');
+            const selA = document.getElementById(`selCondExcelA_${id}`);
+            const selB = document.getElementById(`selCondExcelB_${id}`);
+            if (selA && selB && selA.value && selB.value) {
+                condiciones.push({
+                    claveOrigenA: selA.value,
+                    claveOrigenB: selB.value
+                });
+            }
+        });
+
+        return condiciones;
+    }
+
+    async function evaluarRiesgoClavesExcel() {
+        const panel = document.getElementById('panelDiagnosticoExcel');
+        const input = document.getElementById('inputExcel');
+        if (!input.files || !input.files[0]) return;
+
+        const hojaA = document.getElementById('selHojaMultiA').value;
+        const hojaB = document.getElementById('selHojaMultiB').value;
+        const condiciones = obtenerCondicionesExcel();
+
+        if (condiciones.length === 0) {
+            panel.className = "p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-slate-50 border-slate-200 text-slate-500";
+            panel.innerHTML = `<span class="material-symbols-outlined text-base">info</span><span>Configura al menos un par de columnas clave para validar riesgo de fan-out con DuckDB.</span>`;
+            return;
+        }
+
+        panel.innerHTML = `<span class="material-symbols-outlined text-base animate-spin text-primary">sync</span><span>Evaluando unicidad de claves y riesgo de duplicación en DuckDB...</span>`;
+
+        const formData = new FormData();
+        formData.append('archivo', input.files[0]);
+        formData.append('hojaA', hojaA);
+        formData.append('hojaB', hojaB);
+        formData.append('condicionesJson', JSON.stringify(condiciones));
+
+        try {
+            const resp = await fetch('/api/ingesta/excel/inspeccionar-claves-multihoja', {
+                method: 'POST',
+                body: formData
+            });
+            const diag = await resp.json();
+
+            if (!diag.exito) {
+                panel.className = "p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-red-50 border-red-200 text-red-700";
+                panel.innerHTML = `<span class="material-symbols-outlined text-base">error</span><span>${diag.error}</span>`;
+                return;
+            }
+
+            if (diag.riesgoFanOut) {
+                panel.className = "p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-amber-50 border-amber-300 text-amber-900";
+                panel.innerHTML = `
+                    <span class="material-symbols-outlined text-base text-amber-600">warning</span>
+                    <div>
+                        <strong>Riesgo de Fan-Out Detectado:</strong> ${diag.mensaje}
+                    </div>
+                `;
+            } else {
+                panel.className = "p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-emerald-50 border-emerald-300 text-emerald-900";
+                panel.innerHTML = `
+                    <span class="material-symbols-outlined text-base text-emerald-600">check_circle</span>
+                    <div>
+                        <strong>Relación Segura:</strong> ${diag.mensaje}
+                    </div>
+                `;
+            }
+        } catch (e) {
+            panel.className = "p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-red-50 border-red-200 text-red-700";
+            panel.innerHTML = `<span class="material-symbols-outlined text-base">error</span><span>Error de conexión al analizar claves en Excel.</span>`;
+        }
+    }
+
+    function sincronizarMapeoColumnasExcelMulti() {
+        if (!datosExcelMultiHojas || !datosExcelMultiHojas.detalleHojas) return;
+
+        const hojaA = document.getElementById('selHojaMultiA').value;
+        const hojaB = document.getElementById('selHojaMultiB').value;
+        const infoA = datosExcelMultiHojas.detalleHojas[hojaA];
+        const infoB = datosExcelMultiHojas.detalleHojas[hojaB];
+        const tbody = document.getElementById('filasColumnasExcelMultiHoja');
+
+        if (!infoA || !infoB || !tbody) return;
+
+        tbody.innerHTML = '';
+        const nombresVistos = new Set();
+
+        infoA.columnas.forEach((col, idx) => {
+            nombresVistos.add(col.nombre);
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-slate-50 transition-colors";
+            tr.innerHTML = `
+                <td class="py-2 px-3 font-bold text-primary"><span class="px-1.5 py-0.5 bg-primary/10 rounded text-[10px]">A (${hojaA})</span></td>
+                <td class="py-2 px-3 font-mono font-bold text-slate-700">${col.nombre}</td>
+                <td class="py-2 px-3">
+                    <input type="text" id="final_excel_A_${idx}" value="${col.nombre}" class="bg-white border border-outline-variant rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-800 w-full">
+                </td>
+                <td class="py-2 px-3">
+                    <select id="clasif_excel_A_${idx}" class="bg-white border border-outline-variant rounded-lg px-2 py-1 text-xs font-bold text-on-surface">
+                        <option value="Categorica/Dimension" ${col.clasificacion === 'Categorica/Dimension' ? 'selected' : ''}>Categorica/Dimension</option>
+                        <option value="MetricaSumable" ${col.clasificacion === 'MetricaSumable' ? 'selected' : ''}>MetricaSumable (SUM)</option>
+                        <option value="MetricaNoSumable" ${col.clasificacion === 'MetricaNoSumable' ? 'selected' : ''}>MetricaNoSumable (AVG/MAX)</option>
+                        <option value="Identificador/Descarte">Identificador/Descarte</option>
+                    </select>
+                </td>
+                <td class="py-2 px-3 text-center">
+                    <input type="checkbox" id="inc_excel_A_${idx}" checked class="rounded text-primary focus:ring-0">
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        infoB.columnas.forEach((col, idx) => {
+            let nombrePropuesto = col.nombre;
+            if (nombresVistos.has(nombrePropuesto)) {
+                nombrePropuesto = `${hojaB.replace(/[^a-zA-Z0-9]/g, '_')}_${nombrePropuesto}`;
+            }
+
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-slate-50 transition-colors";
+            tr.innerHTML = `
+                <td class="py-2 px-3 font-bold text-secondary"><span class="px-1.5 py-0.5 bg-secondary/10 rounded text-[10px]">B (${hojaB})</span></td>
+                <td class="py-2 px-3 font-mono font-bold text-slate-700">${col.nombre}</td>
+                <td class="py-2 px-3">
+                    <input type="text" id="final_excel_B_${idx}" value="${nombrePropuesto}" class="bg-white border border-outline-variant rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-800 w-full">
+                </td>
+                <td class="py-2 px-3">
+                    <select id="clasif_excel_B_${idx}" class="bg-white border border-outline-variant rounded-lg px-2 py-1 text-xs font-bold text-on-surface">
+                        <option value="Categorica/Dimension" ${col.clasificacion === 'Categorica/Dimension' ? 'selected' : ''}>Categorica/Dimension</option>
+                        <option value="MetricaSumable" ${col.clasificacion === 'MetricaSumable' ? 'selected' : ''}>MetricaSumable (SUM)</option>
+                        <option value="MetricaNoSumable" ${col.clasificacion === 'MetricaNoSumable' ? 'selected' : ''}>MetricaNoSumable (AVG/MAX)</option>
+                        <option value="Identificador/Descarte">Identificador/Descarte</option>
+                    </select>
+                </td>
+                <td class="py-2 px-3 text-center">
+                    <input type="checkbox" id="inc_excel_B_${idx}" checked class="rounded text-secondary focus:ring-0">
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function ejecutarCruceExcelMultiHoja() {
+        const input = document.getElementById('inputExcel');
+        if (!input.files || !input.files[0]) {
+            mostrarModalAlerta({
+                titulo: 'Archivo Requerido',
+                mensaje: 'Por favor selecciona un archivo Excel (.xlsx).',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const codigo = document.getElementById('codigoCuboMultiHoja').value.trim();
+        const nombre = document.getElementById('nombreCuboMultiHoja').value.trim();
+        const hojaA = document.getElementById('selHojaMultiA').value;
+        const hojaB = document.getElementById('selHojaMultiB').value;
+        const tipoJoin = document.getElementById('selTipoJoinExcel').value;
+        const elRol = document.getElementById('rolDefectoMultiHoja');
+        const rolDefecto = elRol ? elRol.value : '';
+        const condiciones = obtenerCondicionesExcel();
+
+        if (!codigo || !nombre) {
+            mostrarModalAlerta({
+                titulo: 'Campos Obligatorios',
+                mensaje: 'Debe ingresar un Código de Cubo y Nombre Descriptivo válidos.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        if (condiciones.length === 0) {
+            mostrarModalAlerta({
+                titulo: 'Condición de Cruce Requerida',
+                mensaje: 'Debe especificar al menos una condición de enlace (JOIN) entre las hojas.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const infoA = datosExcelMultiHojas.detalleHojas[hojaA];
+        const infoB = datosExcelMultiHojas.detalleHojas[hojaB];
+        const columnas = [];
+
+        infoA.columnas.forEach((col, idx) => {
+            const inc = document.getElementById(`inc_excel_A_${idx}`).checked;
+            const final = document.getElementById(`final_excel_A_${idx}`).value.trim();
+            const clasif = document.getElementById(`clasif_excel_A_${idx}`).value;
+            if (inc) {
+                columnas.push({
+                    nombreOriginal: col.nombre,
+                    origen: "A",
+                    nombreFinal: final || col.nombre,
+                    clasificacionSemantica: clasif,
+                    esObligatoria: true
+                });
+            }
+        });
+
+        infoB.columnas.forEach((col, idx) => {
+            const inc = document.getElementById(`inc_excel_B_${idx}`).checked;
+            const final = document.getElementById(`final_excel_B_${idx}`).value.trim();
+            const clasif = document.getElementById(`clasif_excel_B_${idx}`).value;
+            if (inc) {
+                columnas.push({
+                    nombreOriginal: col.nombre,
+                    origen: "B",
+                    nombreFinal: final || col.nombre,
+                    clasificacionSemantica: clasif,
+                    esObligatoria: true
+                });
+            }
+        });
+
+        if (columnas.length === 0) {
+            mostrarModalAlerta({
+                titulo: 'Columnas Requeridas',
+                mensaje: 'Debes incluir al menos una columna en el nuevo cubo.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const btn = document.getElementById('btnCrearExcelMultiHoja');
+        btn.disabled = true;
+        btn.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">sync</span> Procesando JOIN vectorizado con DuckDB...`;
+
+        const formData = new FormData();
+        formData.append('archivo', input.files[0]);
+        formData.append('codigoVista', codigo);
+        formData.append('nombreVista', nombre);
+        formData.append('hojaA', hojaA);
+        formData.append('hojaB', hojaB);
+        formData.append('tipoJoin', tipoJoin);
+        formData.append('condicionesJson', JSON.stringify(condiciones));
+        formData.append('configuracionColumnasJson', JSON.stringify(columnas));
+        formData.append('rolDefecto', rolDefecto);
+
+        try {
+            const resp = await fetch('/api/ingesta/excel/procesar-multihoja', {
+                method: 'POST',
+                body: formData
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                mostrarModalExitoCubo({
+                    idCubo: data.idCubo,
+                    nombreCubo: data.nombreCubo || codigo,
+                    totalFilas: data.totalFilas,
+                    totalColumnas: data.totalColumnas
+                });
+            } else {
+                mostrarModalAlerta({
+                    titulo: 'Error al Procesar Cruce Multi-Hoja',
+                    mensaje: data.error || 'Fallo desconocido',
+                    tipo: 'error'
+                });
+                btn.disabled = false;
+                btn.innerHTML = `<span class="material-symbols-outlined text-sm">rocket_launch</span> Generar Cubo Multi-Hoja OBT (ZSTD)`;
+            }
+        } catch (e) {
+            console.error(e);
+            mostrarModalAlerta({
+                titulo: 'Error de Conexión',
+                mensaje: e.message,
+                tipo: 'error'
+            });
+            btn.disabled = false;
+            btn.innerHTML = `<span class="material-symbols-outlined text-sm">rocket_launch</span> Generar Cubo Multi-Hoja OBT (ZSTD)`;
+        }
+    }
+
+    function seleccionarConexionPredefinida(selectEl) {
+        if (selectEl && selectEl.value) {
+            document.getElementById('cadenaSql').value = selectEl.value;
+        }
+    }
+
+    async function probarSql() {
+        const cadena = document.getElementById('cadenaSql').value;
+        const sql = document.getElementById('consultaSql').value;
+        const resDiv = document.getElementById('resultadoSql');
+        const btnMat = document.getElementById('btnMaterializarSql');
+        
+        resDiv.classList.remove('hidden');
+        resDiv.innerHTML = `<div class="flex items-center gap-2 text-primary font-bold"><span class="material-symbols-outlined text-sm animate-spin">sync</span> Conectando al motor y extrayendo muestra de datos...</div>`;
+        
+        try {
+            const resp = await fetch('/api/sql/probar', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cadenaConexion: cadena, consultaSql: sql })
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                if (btnMat) btnMat.classList.remove('hidden');
+                let html = `<div class="flex items-center justify-between">`;
+                html += `<p class="font-bold text-secondary flex items-center gap-1.5"><span class="material-symbols-outlined text-sm">check_circle</span> Muestra extraída con éxito: <b>${data.filas.length} registros</b>, <b>${data.columnas.length} columnas</b> detectadas.</p>`;
+                html += `</div>`;
+                
+                // Tabla previsualización
+                html += `<div class="overflow-x-auto max-h-72 border border-outline-variant/40 rounded-xl bg-white shadow-xs">`;
+                html += `<table class="w-full text-left border-collapse text-[11px]">`;
+                html += `<thead><tr class="bg-surface-container text-on-surface-variant font-bold border-b border-outline-variant/50 sticky top-0">`;
+                data.columnas.forEach(c => {
+                    html += `<th class="py-2 px-3 whitespace-nowrap font-mono">${c}</th>`;
+                });
+                html += `</tr></thead><tbody class="divide-y divide-outline-variant/20">`;
+                data.filas.forEach(row => {
+                    html += `<tr class="hover:bg-surface-container-low/40">`;
+                    data.columnas.forEach(c => {
+                        const val = row[c] !== null && row[c] !== undefined ? row[c] : '';
+                        html += `<td class="py-1.5 px-3 whitespace-nowrap text-on-surface">${val}</td>`;
+                    });
+                    html += `</tr>`;
+                });
+                html += `</tbody></table></div>`;
+                resDiv.innerHTML = html;
+            } else {
+                if (btnMat) btnMat.classList.add('hidden');
+                resDiv.innerHTML = `<div class="p-3 rounded-xl bg-error/10 text-error flex items-center gap-2 border border-error/20"><span class="material-symbols-outlined text-sm">error</span> <div><b>Error en consulta SQL:</b> ${data.error}</div></div>`;
+            }
+        } catch(e) {
+            if (btnMat) btnMat.classList.add('hidden');
+            resDiv.innerHTML = `<div class="p-3 rounded-xl bg-error/10 text-error flex items-center gap-2 border border-error/20"><span class="material-symbols-outlined text-sm">error</span> Fallo de comunicación: ${e.message}</div>`;
+        }
+    }
+
+    function detectarClausulaTopEnSql(sql) {
+        const alerta = document.getElementById('alertaTopSql');
+        if (!alerta) return;
+        const esSp = /^\s*(?:exec|execute)\b/i.test((sql || '').trim());
+        if (esSp) {
+            alerta.className = "mt-2 p-2.5 rounded-xl bg-purple-50 border border-purple-200 text-purple-900 text-xs flex items-center gap-2";
+            alerta.innerHTML = `<span class="material-symbols-outlined text-sm text-purple-600">bolt</span> <span><b>Stored Procedure detectado (EXEC):</b> Se ejecutará el procedimiento completo sin aplicar TOP para obtener el conjunto de datos y muestra real.</span>`;
+            alerta.classList.remove('hidden');
+        } else if (/\b(top\s*\(?\s*\d+|limit\s+\d+)\b/i.test(sql)) {
+            alerta.className = "mt-2 p-2.5 rounded-xl bg-blue-50 border border-blue-200 text-blue-800 text-xs flex items-center gap-2";
+            alerta.innerHTML = `<span class="material-symbols-outlined text-sm text-blue-600">info</span> <span><b>Aviso de Muestreo:</b> Se detectó cláusula <code>TOP / LIMIT</code>. Se usará para previsualizar, pero al materializar el cubo se removerá automáticamente para extraer toda la data.</span>`;
+            alerta.classList.remove('hidden');
+        } else {
+            alerta.classList.add('hidden');
+        }
+    }
+
+    async function generarCuboDesdeSql() {
+        const cadena = document.getElementById('cadenaSql').value.trim();
+        const sql = document.getElementById('consultaSql').value.trim();
+        const codigoVista = document.getElementById('codigoVistaSql').value.trim();
+        const removerLimiteMuestra = document.getElementById('chkRemoverTopSql') ? document.getElementById('chkRemoverTopSql').checked : true;
+
+        if (!codigoVista) {
+            mostrarModalAlerta({
+                titulo: 'Campo Requerido',
+                mensaje: 'Por favor especifica un Código de Vista / Cubo.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const btnMat = document.getElementById('btnMaterializarSql');
+        btnMat.disabled = true;
+        btnMat.innerHTML = `<span class="material-symbols-outlined text-sm animate-spin">sync</span> Extrayendo y generando Parquet ZSTD...`;
+
+        try {
+            const resp = await fetch('/api/sql/procesar-cubo', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    cadenaConexion: cadena,
+                    codigoVista: codigoVista,
+                    nombreVista: codigoVista,
+                    consultaSql: sql,
+                    removerLimiteMuestra: removerLimiteMuestra
+                })
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                mostrarModalExitoCubo({
+                    idCubo: data.idCubo,
+                    nombreCubo: data.nombreCubo || codigoVista,
+                    totalFilas: data.totalFilas,
+                    totalColumnas: data.totalColumnas
+                });
+            } else {
+                mostrarModalAlerta({
+                    titulo: 'Error al Materializar Cubo',
+                    mensaje: data.error || 'Fallo desconocido',
+                    tipo: 'error'
+                });
+                btnMat.disabled = false;
+                btnMat.innerHTML = `<span class="material-symbols-outlined text-sm">save</span> Generar y Materializar Cubo Parquet OBT`;
+            }
+        } catch(e) {
+            mostrarModalAlerta({
+                titulo: 'Error de Conexión',
+                mensaje: e.message,
+                tipo: 'error'
+            });
+            btnMat.disabled = false;
+            btnMat.innerHTML = `<span class="material-symbols-outlined text-sm">save</span> Generar y Materializar Cubo Parquet OBT`;
+        }
+    }
+
+    // =========================================================================
+    // DATA LAKE: MUESTREO Y PERFILADO SEMÁNTICO
+    // =========================================================================
+
+    // =========================================================================
+    // DISEÑADOR DE ESQUEMA / CUBOS VACÍOS PARA DATA LAKE (ETL MASIVA)
+    // =========================================================================
+    let modoDlActual = 'visual';
+
+    function generarCodigoDesdeNombreDl(val) {
+        const codInput = document.getElementById('dlCodigoCubo');
+        if (!codInput) return;
+        const slug = val.toLowerCase()
+            .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
+            .replace(/[^a-z0-9_]/g, '_')
+            .replace(/_+/g, '_')
+            .replace(/^_|_$/g, '');
+        codInput.value = slug;
+    }
+
+    function conmutarModoDl(modo) {
+        modoDlActual = modo;
+        const btnVisual = document.getElementById('btnModoDlVisual');
+        const btnSql = document.getElementById('btnModoDlSql');
+        const panelVisual = document.getElementById('panelDlVisual');
+        const panelSql = document.getElementById('panelDlSql');
+        const auxVisual = document.getElementById('controlesAuxiliaresVisual');
+        const auxSql = document.getElementById('controlesAuxiliaresSql');
+
+        if (modo === 'visual') {
+            btnVisual.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 bg-white text-primary shadow-xs";
+            btnSql.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 text-on-surface-variant hover:text-primary";
+            panelVisual.classList.remove('hidden');
+            panelSql.classList.add('hidden');
+            auxVisual.classList.remove('hidden');
+            auxSql.classList.add('hidden');
+        } else {
+            btnSql.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 bg-white text-primary shadow-xs";
+            btnVisual.className = "px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all flex items-center gap-1.5 text-on-surface-variant hover:text-primary";
+            panelSql.classList.remove('hidden');
+            panelVisual.classList.add('hidden');
+            auxSql.classList.remove('hidden');
+            auxVisual.classList.add('hidden');
+        }
+    }
+
+    function agregarFilaColumnaDl(nombre = '', tipo = 'VARCHAR', clasif = 'Categorica/Dimension') {
+        const tbody = document.getElementById('cuerpoColumnasDlVisual');
+        if (!tbody) return;
+
+        const rowCount = tbody.querySelectorAll('tr').length + 1;
+        const tr = document.createElement('tr');
+        tr.className = "hover:bg-slate-50/80 transition-colors";
+        tr.innerHTML = `
+            <td class="py-2.5 px-3 text-center font-mono text-slate-400 text-[11px] dl-col-num">${rowCount}</td>
+            <td class="py-2.5 px-4">
+                <input type="text" value="${nombre}" placeholder="nombre_columna" class="dl-col-nom w-full bg-white border border-outline-variant rounded-lg px-2.5 py-1.5 text-xs font-mono font-bold text-primary focus:ring-1 focus:ring-primary focus:outline-none">
+            </td>
+            <td class="py-2.5 px-4">
+                <select class="dl-col-tipo w-full bg-white border border-outline-variant rounded-lg px-2 py-1.5 text-xs font-mono font-bold text-on-surface focus:ring-1 focus:ring-primary focus:outline-none" onchange="autoSugerirClasificacionDl(this)">
+                    <option value="VARCHAR" ${tipo === 'VARCHAR' ? 'selected' : ''}>VARCHAR (Texto)</option>
+                    <option value="BIGINT" ${tipo === 'BIGINT' ? 'selected' : ''}>BIGINT (Entero 64-bit)</option>
+                    <option value="INTEGER" ${tipo === 'INTEGER' ? 'selected' : ''}>INTEGER (Entero 32-bit)</option>
+                    <option value="DOUBLE" ${tipo === 'DOUBLE' ? 'selected' : ''}>DOUBLE (Decimal/Float)</option>
+                    <option value="DECIMAL(18,2)" ${tipo.startsWith('DECIMAL') ? 'selected' : ''}>DECIMAL(18,2) (Moneda)</option>
+                    <option value="DATE" ${tipo === 'DATE' ? 'selected' : ''}>DATE (Fecha)</option>
+                    <option value="TIMESTAMP" ${tipo === 'TIMESTAMP' ? 'selected' : ''}>TIMESTAMP (Fecha y Hora)</option>
+                    <option value="BOOLEAN" ${tipo === 'BOOLEAN' ? 'selected' : ''}>BOOLEAN (Booleano)</option>
+                </select>
+            </td>
+            <td class="py-2.5 px-4">
+                <select class="dl-col-clasif w-full bg-white border border-outline-variant rounded-lg px-2 py-1.5 text-xs font-bold text-on-surface focus:ring-1 focus:ring-primary focus:outline-none">
+                    <option value="Categorica/Dimension" ${clasif === 'Categorica/Dimension' ? 'selected' : ''}>Categorica/Dimension</option>
+                    <option value="MetricaSumable" ${clasif === 'MetricaSumable' ? 'selected' : ''}>MetricaSumable (SUM)</option>
+                    <option value="Temporal" ${clasif === 'Temporal' ? 'selected' : ''}>Temporal (Tendencia)</option>
+                </select>
+            </td>
+            <td class="py-2.5 px-3 text-center">
+                <button type="button" onclick="eliminarFilaColumnaDl(this)" class="w-7 h-7 rounded-lg text-slate-400 hover:text-error hover:bg-error/10 transition-colors inline-flex items-center justify-center" title="Eliminar fila">
+                    <span class="material-symbols-outlined text-base">delete</span>
+                </button>
+            </td>
+        `;
+        tbody.appendChild(tr);
+        actualizarConteoColumnasDl();
+    }
+
+    function autoSugerirClasificacionDl(selectTipo) {
+        const tr = selectTipo.closest('tr');
+        if (!tr) return;
+        const selClasif = tr.querySelector('.dl-col-clasif');
+        const tipo = selectTipo.value.toUpperCase();
+        if (tipo.includes('DATE') || tipo.includes('TIME')) {
+            selClasif.value = 'Temporal';
+        } else if (tipo.includes('INT') || tipo.includes('DOUBLE') || tipo.includes('DECIMAL') || tipo.includes('FLOAT')) {
+            selClasif.value = 'MetricaSumable';
+        } else {
+            selClasif.value = 'Categorica/Dimension';
+        }
+    }
+
+    function eliminarFilaColumnaDl(btn) {
+        const tr = btn.closest('tr');
+        if (tr) {
+            tr.remove();
+            actualizarConteoColumnasDl();
+        }
+    }
+
+    function actualizarConteoColumnasDl() {
+        const tbody = document.getElementById('cuerpoColumnasDlVisual');
+        if (!tbody) return;
+        const filas = tbody.querySelectorAll('tr');
+        document.getElementById('conteoColumnasDl').textContent = filas.length;
+        filas.forEach((tr, i) => {
+            const tdNum = tr.querySelector('.dl-col-num');
+            if (tdNum) tdNum.textContent = i + 1;
+        });
+    }
+
+    function cargarEjemploDdlSql() {
+        const txt = document.getElementById('txtDdlSql');
+        txt.value = `CREATE TABLE cubo_siniestros_masivo (\n    id_siniestro BIGINT,\n    numero_poliza VARCHAR,\n    ramo VARCHAR,\n    monto_reserva DECIMAL(18, 2),\n    monto_pagado DECIMAL(18, 2),\n    fecha_ocurrencia DATE,\n    fecha_registro TIMESTAMP,\n    estado_siniestro VARCHAR,\n    es_fraude BOOLEAN\n);`;
+        const nomInput = document.getElementById('dlNombreCubo');
+        if (!nomInput.value) {
+            nomInput.value = "Cubo Siniestros Masivo";
+            generarCodigoDesdeNombreDl(nomInput.value);
+        }
+    }
+
+    async function interpretarDdlYPasarAVisual() {
+        const ddl = document.getElementById('txtDdlSql').value.trim();
+        const feedback = document.getElementById('feedbackDdlSql');
+        feedback.classList.add('hidden');
+
+        if (!ddl) {
+            mostrarModalAlerta({
+                titulo: 'Sentencia Vacía',
+                mensaje: 'Por favor pega o redacta una sentencia CREATE TABLE en el cuadro de texto.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        try {
+            const resp = await fetch('/api/ingesta/datalake/parsear-ddl', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ddl: ddl })
+            });
+            const data = await resp.json();
+
+            if (data.exito && data.columnas && data.columnas.length > 0) {
+                const tbody = document.getElementById('cuerpoColumnasDlVisual');
+                tbody.innerHTML = '';
+                data.columnas.forEach(c => {
+                    agregarFilaColumnaDl(c.nombre, c.tipo, c.clasificacion);
+                });
+
+                if (data.nombreTablaSugerido && data.nombreTablaSugerido !== '_tabla_temp_ddl') {
+                    const nomInput = document.getElementById('dlNombreCubo');
+                    if (!nomInput.value) {
+                        nomInput.value = data.nombreTablaSugerido.replace(/_/g, ' ');
+                        generarCodigoDesdeNombreDl(nomInput.value);
+                    }
+                }
+
+                conmutarModoDl('visual');
+                mostrarToast(`¡Sintaxis SQL válida! Se cargaron ${data.columnas.length} columnas al constructor visual.`);
+            } else {
+                feedback.className = "p-3 rounded-xl bg-error-container/30 border border-error/30 text-error text-xs font-bold";
+                feedback.textContent = data.error || 'No se pudieron extraer columnas del SQL.';
+                feedback.classList.remove('hidden');
+            }
+        } catch (e) {
+            feedback.className = "p-3 rounded-xl bg-error-container/30 border border-error/30 text-error text-xs font-bold";
+            feedback.textContent = 'Error de conexión al interpretar sentencia DDL con DuckDB.';
+            feedback.classList.remove('hidden');
+        }
+    }
+
+    async function ejecutarCreacionCuboVacioDl() {
+        const nombre = document.getElementById('dlNombreCubo').value.trim();
+        const codigo = document.getElementById('dlCodigoCubo').value.trim();
+
+        if (!nombre || !codigo) {
+            mostrarModalAlerta({
+                titulo: 'Campos Obligatorios',
+                mensaje: 'Debes indicar el Nombre y el Código del Cubo.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const tbody = document.getElementById('cuerpoColumnasDlVisual');
+        const filas = tbody ? tbody.querySelectorAll('tr') : [];
+        if (filas.length === 0) {
+            mostrarModalAlerta({
+                titulo: 'Esquema Vacío',
+                mensaje: 'Debes definir al menos una columna para el cubo (usa el botón "+ Agregar Columna" o interpreta una sentencia SQL DDL).',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const columnas = [];
+        let errorNombre = false;
+        filas.forEach(tr => {
+            const nom = tr.querySelector('.dl-col-nom').value.trim();
+            const tipo = tr.querySelector('.dl-col-tipo').value;
+            const clasif = tr.querySelector('.dl-col-clasif').value;
+            if (!nom) {
+                errorNombre = true;
+            } else {
+                columnas.push({ nombre: nom, tipo: tipo, clasificacion: clasif });
+            }
+        });
+
+        if (errorNombre || columnas.length === 0) {
+            mostrarModalAlerta({
+                titulo: 'Nombres Inválidos',
+                mensaje: 'Todas las columnas añadidas deben tener un nombre válido no vacío.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const btn = document.getElementById('btnCrearCuboVacioDl');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="material-symbols-outlined text-sm animate-spin">sync</span> Generando Parquet Vacío...';
+
+        try {
+            const resp = await fetch('/api/ingesta/datalake/crear-cubo-vacio', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    nombreCubo: nombre,
+                    codigoCubo: codigo,
+                    columnas: columnas
+                })
+            });
+
+            const data = await resp.json();
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-symbols-outlined text-sm">save</span> Crear Cubo y Generar Parquet Vacío';
+
+            if (data.exito) {
+                mostrarModalExitoCubo({
+                    idCubo: data.idCubo,
+                    nombreCubo: data.nombreCubo,
+                    totalFilas: 0,
+                    totalColumnas: data.totalColumnas,
+                    rutaParquet: data.rutaAbsolutaParquet
+                });
+            } else {
+                mostrarModalAlerta({
+                    titulo: 'Error al Crear Cubo',
+                    mensaje: data.error || 'No se pudo generar el cubo vacío.',
+                    tipo: 'error'
+                });
+            }
+        } catch (e) {
+            btn.disabled = false;
+            btn.innerHTML = '<span class="material-symbols-outlined text-sm">save</span> Crear Cubo y Generar Parquet Vacío';
+            mostrarModalAlerta({
+                titulo: 'Error de Red',
+                mensaje: 'Fallo de conexión al comunicarse con el servidor.',
+                tipo: 'error'
+            });
+        }
+    }
+
+    // =========================================================================
+    // CUBO COMPUESTO: ENLACE JOIN, FAN-OUT Y MAPEO UNIFICADO
+    // =========================================================================
+
+    async function cargarCatalogoCubos() {
+        try {
+            const resp = await fetch('/api/ingesta/cubos-disponibles');
+            const data = await resp.json();
+            if (data.exito) {
+                catalogoCubosGlobal = data.cubos;
+                poblarSelectoresCubos();
+            }
+        } catch(e) {
+            console.error("Error cargando cubos disponibles:", e);
+        }
+    }
+
+    function poblarSelectoresCubos() {
+        const selA = document.getElementById('selCuboOrigenA');
+        const selB = document.getElementById('selCuboOrigenB');
+        if (!selA || !selB) return;
+
+        let optionsHtml = '<option value="">-- Selecciona una fuente Parquet --</option>';
+        catalogoCubosGlobal.forEach(c => {
+            const badgeTipo = c.tipoOrigen === 'ExcelModalidadA' || c.tipoOrigen === 'ExcelModalidadB' ? '📊 Excel' :
+                             (c.tipoOrigen === 'SqlEnVivo' ? '⚡ SQL' : (c.tipoOrigen === 'CuboCompuesto' ? '🔗 Compuesto' : '🗄️ DataLake'));
+            optionsHtml += `<option value="${c.rutaParquet}">${c.nombreVista} (${c.totalFilas.toLocaleString()} filas) [${badgeTipo}]</option>`;
+        });
+
+        selA.innerHTML = optionsHtml;
+        selB.innerHTML = optionsHtml;
+    }
+
+    function actualizarBadgeOrigen(selId, badgeId) {
+        const ruta = document.getElementById(selId).value;
+        const badge = document.getElementById(badgeId);
+        const cubo = catalogoCubosGlobal.find(c => c.rutaParquet === ruta);
+        if (cubo) {
+            badge.textContent = cubo.tipoOrigen;
+            badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-primary/10 text-primary";
+        } else {
+            badge.textContent = "Origen";
+            badge.className = "px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-600";
+        }
+    }
+
+    let contadorCondicionesCompuesto = 0;
+
+    function agregarFilaCondicionCompuesto(colASugerida = '', colBSugerida = '') {
+        const contenedor = document.getElementById('contenedorCondicionesCompuesto');
+        if (contenedor.children.length === 1 && contenedor.children[0].classList.contains('italic')) {
+            contenedor.innerHTML = '';
+        }
+
+        const id = ++contadorCondicionesCompuesto;
+        const div = document.createElement('div');
+        div.id = `filaCondicionCompuesto_${id}`;
+        div.className = "flex flex-col sm:flex-row items-stretch sm:items-center gap-2 p-2.5 bg-white rounded-xl border border-outline-variant/60 shadow-xs";
+
+        div.innerHTML = `
+            <div class="flex-1">
+                <label class="block text-[10px] font-bold text-primary uppercase mb-1">Columna Clave Origen A</label>
+                <select id="selCondCompuestoA_${id}" onchange="evaluarRiesgoClaves()" class="w-full text-xs px-2.5 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg font-mono font-bold text-slate-800 focus:ring-1 focus:ring-primary">
+                </select>
+            </div>
+            <div class="self-center sm:pt-4 text-center">
+                <span class="px-2 py-1 rounded bg-slate-100 font-mono font-bold text-slate-500 text-xs">=</span>
+            </div>
+            <div class="flex-1">
+                <label class="block text-[10px] font-bold text-secondary uppercase mb-1">Columna Clave Origen B</label>
+                <select id="selCondCompuestoB_${id}" onchange="evaluarRiesgoClaves()" class="w-full text-xs px-2.5 py-1.5 bg-surface-container-low border border-outline-variant rounded-lg font-mono font-bold text-slate-800 focus:ring-1 focus:ring-secondary">
+                </select>
+            </div>
+            <div class="sm:pt-4 flex justify-end">
+                <button type="button" onclick="eliminarFilaCondicionCompuesto(${id})" title="Eliminar condición" class="p-1.5 rounded-lg text-slate-400 hover:text-red-600 hover:bg-red-50 transition-colors">
+                    <span class="material-symbols-outlined text-base">close</span>
+                </button>
+            </div>
+        `;
+
+        contenedor.appendChild(div);
+        poblarOpcionesFilaCondicionCompuesto(id, colASugerida, colBSugerida);
+    }
+
+    function eliminarFilaCondicionCompuesto(id) {
+        const fila = document.getElementById(`filaCondicionCompuesto_${id}`);
+        if (fila) fila.remove();
+        const contenedor = document.getElementById('contenedorCondicionesCompuesto');
+        if (contenedor.children.length === 0) {
+            contenedor.innerHTML = `<div class="p-3 bg-slate-50 border border-slate-200 rounded-lg text-xs text-slate-400 text-center italic">Sin condiciones definidas. Haz clic en '+ Agregar Condición (AND)'.</div>`;
+        }
+        evaluarRiesgoClaves();
+    }
+
+    function poblarOpcionesFilaCondicionCompuesto(id, colASugerida = '', colBSugerida = '') {
+        const selA = document.getElementById(`selCondCompuestoA_${id}`);
+        const selB = document.getElementById(`selCondCompuestoB_${id}`);
+
+        if (selA && metadatosA && metadatosA.columnas) {
+            selA.innerHTML = '<option value="">-- Columna Clave Origen A --</option>';
+            metadatosA.columnas.forEach(col => {
+                const opt = document.createElement('option');
+                opt.value = col.nombreColumna;
+                opt.textContent = `${col.nombreColumna} (${col.tipoDato})`;
+                if (col.nombreColumna === colASugerida) opt.selected = true;
+                selA.appendChild(opt);
+            });
+        }
+
+        if (selB && metadatosB && metadatosB.columnas) {
+            selB.innerHTML = '<option value="">-- Columna Clave Origen B --</option>';
+            metadatosB.columnas.forEach(col => {
+                const opt = document.createElement('option');
+                opt.value = col.nombreColumna;
+                opt.textContent = `${col.nombreColumna} (${col.tipoDato})`;
+                if (col.nombreColumna === colBSugerida) opt.selected = true;
+                selB.appendChild(opt);
+            });
+        }
+
+        if (!colASugerida && !colBSugerida && metadatosA && metadatosB) {
+            const colsA = metadatosA.columnas.map(c => c.nombreColumna);
+            const colsB = metadatosB.columnas.map(c => c.nombreColumna);
+            const comunes = colsA.filter(c => colsB.includes(c));
+            if (comunes.length > 0) {
+                if (selA) selA.value = comunes[0];
+                if (selB) selB.value = comunes[0];
+            }
+        }
+    }
+
+    function actualizarOpcionesColumnasCondicionesCompuesto() {
+        const contenedor = document.getElementById('contenedorCondicionesCompuesto');
+        const filas = contenedor.querySelectorAll('[id^="filaCondicionCompuesto_"]');
+        filas.forEach(fila => {
+            const id = fila.id.replace('filaCondicionCompuesto_', '');
+            const selA = document.getElementById(`selCondCompuestoA_${id}`);
+            const selB = document.getElementById(`selCondCompuestoB_${id}`);
+            const valA = selA ? selA.value : '';
+            const valB = selB ? selB.value : '';
+            poblarOpcionesFilaCondicionCompuesto(id, valA, valB);
+        });
+    }
+
+    function obtenerCondicionesCompuesto() {
+        const contenedor = document.getElementById('contenedorCondicionesCompuesto');
+        const filas = contenedor.querySelectorAll('[id^="filaCondicionCompuesto_"]');
+        const condiciones = [];
+
+        filas.forEach(fila => {
+            const id = fila.id.replace('filaCondicionCompuesto_', '');
+            const selA = document.getElementById(`selCondCompuestoA_${id}`);
+            const selB = document.getElementById(`selCondCompuestoB_${id}`);
+            if (selA && selB && selA.value && selB.value) {
+                condiciones.push({
+                    claveOrigenA: selA.value,
+                    claveOrigenB: selB.value
+                });
+            }
+        });
+
+        return condiciones;
+    }
+
+    function sincronizarCondicionesCompuestoAlCargar() {
+        if (metadatosA && metadatosB) {
+            const contenedor = document.getElementById('contenedorCondicionesCompuesto');
+            const filas = contenedor.querySelectorAll('[id^="filaCondicionCompuesto_"]');
+            if (filas.length === 0) {
+                contenedor.innerHTML = '';
+                agregarFilaCondicionCompuesto();
+            } else {
+                actualizarOpcionesColumnasCondicionesCompuesto();
+            }
+            evaluarRiesgoClaves();
+        }
+    }
+
+    async function cargarMetadatosOrigenA() {
+        actualizarBadgeOrigen('selCuboOrigenA', 'badgeOrigenA');
+        const ruta = document.getElementById('selCuboOrigenA').value;
+        metadatosA = null;
+
+        if (!ruta) return;
+
+        const cubo = catalogoCubosGlobal.find(c => c.rutaParquet === ruta);
+        if (!cubo) return;
+
+        try {
+            const resp = await fetch('/api/ingesta/datalake/muestrear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombreArchivoParquet: cubo.nombreArchivo, limiteFilas: 1 })
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                metadatosA = data;
+                sincronizarCondicionesCompuestoAlCargar();
+                sincronizarMapeoColumnasCompuesto();
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function cargarMetadatosOrigenB() {
+        actualizarBadgeOrigen('selCuboOrigenB', 'badgeOrigenB');
+        const ruta = document.getElementById('selCuboOrigenB').value;
+        metadatosB = null;
+
+        if (!ruta) return;
+
+        const cubo = catalogoCubosGlobal.find(c => c.rutaParquet === ruta);
+        if (!cubo) return;
+
+        try {
+            const resp = await fetch('/api/ingesta/datalake/muestrear', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ nombreArchivoParquet: cubo.nombreArchivo, limiteFilas: 1 })
+            });
+            const data = await resp.json();
+            if (data.exito) {
+                metadatosB = data;
+                sincronizarCondicionesCompuestoAlCargar();
+                sincronizarMapeoColumnasCompuesto();
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }
+
+    async function evaluarRiesgoClaves() {
+        const rutaA = document.getElementById('selCuboOrigenA').value;
+        const rutaB = document.getElementById('selCuboOrigenB').value;
+        const condiciones = obtenerCondicionesCompuesto();
+        const panel = document.getElementById('panelDiagnosticoFanOut');
+
+        if (!rutaA || !rutaB || condiciones.length === 0) {
+            panel.className = "p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-slate-50 border-slate-200 text-slate-500";
+            panel.innerHTML = `<span class="material-symbols-outlined text-base">info</span><span>Configura ambos orígenes y define los pares de columnas clave para evaluar riesgo con DuckDB.</span>`;
+            return;
+        }
+
+        panel.innerHTML = `<span class="material-symbols-outlined text-base animate-spin text-primary">sync</span><span>Analizando cardinalidad y riesgo de fan-out con DuckDB...</span>`;
+
+        try {
+            const resp = await fetch('/api/ingesta/inspeccionar-claves', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    rutaOrigenA: rutaA,
+                    rutaOrigenB: rutaB,
+                    claveOrigenA: condiciones[0].claveOrigenA,
+                    claveOrigenB: condiciones[0].claveOrigenB,
+                    condiciones: condiciones
+                })
+            });
+            const diag = await resp.json();
+
+            if (!diag.exito) {
+                panel.className = "p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-red-50 border-red-200 text-red-700";
+                panel.innerHTML = `<span class="material-symbols-outlined text-base">error</span><span>${diag.error}</span>`;
+                return;
+            }
+
+            if (diag.riesgoFanOut) {
+                panel.className = "p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-amber-50 border-amber-300 text-amber-900";
+                panel.innerHTML = `
+                    <span class="material-symbols-outlined text-base text-amber-600">warning</span>
+                    <div>
+                        <strong>Riesgo de Fan-Out Detectado:</strong> ${diag.mensaje}
+                    </div>
+                `;
+            } else {
+                panel.className = "p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-emerald-50 border-emerald-300 text-emerald-900";
+                panel.innerHTML = `
+                    <span class="material-symbols-outlined text-base text-emerald-600">check_circle</span>
+                    <div>
+                        <strong>Relación Segura:</strong> ${diag.mensaje}
+                    </div>
+                `;
+            }
+
+        } catch (e) {
+            panel.className = "p-3 rounded-xl border text-xs flex items-center gap-2.5 bg-red-50 border-red-200 text-red-700";
+            panel.innerHTML = `<span class="material-symbols-outlined text-base">error</span><span>Error de conexión al analizar claves.</span>`;
+        }
+    }
+
+    function sincronizarMapeoColumnasCompuesto() {
+        const contenedor = document.getElementById('seccionMapeoCompuesto');
+        const tbody = document.getElementById('filasColumnasCompuesto');
+
+        if (!metadatosA || !metadatosB) {
+            contenedor.classList.add('hidden');
+            return;
+        }
+
+        tbody.innerHTML = '';
+        contenedor.classList.remove('hidden');
+
+        const nombresVistos = new Set();
+
+        // 1. Columnas de Origen A
+        metadatosA.columnas.forEach((col, idx) => {
+            let nombrePropuesto = col.nombreColumna;
+            nombresVistos.add(nombrePropuesto);
+
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-slate-50";
+            tr.innerHTML = `
+                <td class="py-2 px-3 font-bold text-primary"><span class="px-1.5 py-0.5 bg-primary/10 rounded text-[10px]">A (Hechos)</span></td>
+                <td class="py-2 px-3 font-mono font-bold text-slate-700">${col.nombreColumna}</td>
+                <td class="py-2 px-3">
+                    <input type="text" id="final_A_${idx}" value="${nombrePropuesto}" class="bg-white border border-outline-variant rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-800 w-full">
+                </td>
+                <td class="py-2 px-3">
+                    <select id="clasif_A_${idx}" class="bg-white border border-outline-variant rounded-lg px-2 py-1 text-xs font-bold text-on-surface">
+                        <option value="Categorica/Dimension" ${col.clasificacionSugerida === 'Categorica/Dimension' ? 'selected' : ''}>Categorica/Dimension</option>
+                        <option value="MetricaSumable" ${col.clasificacionSugerida === 'MetricaSumable' ? 'selected' : ''}>MetricaSumable (SUM)</option>
+                        <option value="MetricaNoSumable" ${col.clasificacionSugerida === 'MetricaNoSumable' ? 'selected' : ''}>MetricaNoSumable (AVG/MAX)</option>
+                        <option value="Identificador/Descarte">Identificador/Descarte</option>
+                    </select>
+                </td>
+                <td class="py-2 px-3 text-center">
+                    <input type="checkbox" id="inc_A_${idx}" checked class="rounded text-primary focus:ring-0">
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+
+        // 2. Columnas de Origen B (con resolución de colisiones)
+        metadatosB.columnas.forEach((col, idx) => {
+            let nombrePropuesto = col.nombreColumna;
+            if (nombresVistos.has(nombrePropuesto)) {
+                nombrePropuesto = `origenB_${nombrePropuesto}`;
+            }
+
+            const tr = document.createElement('tr');
+            tr.className = "hover:bg-slate-50";
+            tr.innerHTML = `
+                <td class="py-2 px-3 font-bold text-secondary"><span class="px-1.5 py-0.5 bg-secondary/10 rounded text-[10px]">B (Dimensión)</span></td>
+                <td class="py-2 px-3 font-mono font-bold text-slate-700">${col.nombreColumna}</td>
+                <td class="py-2 px-3">
+                    <input type="text" id="final_B_${idx}" value="${nombrePropuesto}" class="bg-white border border-outline-variant rounded-lg px-2 py-1 text-xs font-mono font-bold text-slate-800 w-full">
+                </td>
+                <td class="py-2 px-3">
+                    <select id="clasif_B_${idx}" class="bg-white border border-outline-variant rounded-lg px-2 py-1 text-xs font-bold text-on-surface">
+                        <option value="Categorica/Dimension" ${col.clasificacionSugerida === 'Categorica/Dimension' ? 'selected' : ''}>Categorica/Dimension</option>
+                        <option value="MetricaSumable" ${col.clasificacionSugerida === 'MetricaSumable' ? 'selected' : ''}>MetricaSumable (SUM)</option>
+                        <option value="MetricaNoSumable" ${col.clasificacionSugerida === 'MetricaNoSumable' ? 'selected' : ''}>MetricaNoSumable (AVG/MAX)</option>
+                        <option value="Identificador/Descarte">Identificador/Descarte</option>
+                    </select>
+                </td>
+                <td class="py-2 px-3 text-center">
+                    <input type="checkbox" id="inc_B_${idx}" checked class="rounded text-secondary focus:ring-0">
+                </td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
+
+    async function ejecutarCreacionCuboCompuesto() {
+        const rutaA = document.getElementById('selCuboOrigenA').value;
+        const rutaB = document.getElementById('selCuboOrigenB').value;
+        const condiciones = obtenerCondicionesCompuesto();
+        const tipoJoin = document.getElementById('selTipoJoin').value;
+        const codigo = document.getElementById('codigoCuboCompuesto').value.trim();
+        const nombre = document.getElementById('nombreCuboCompuesto').value.trim();
+        const elRol = document.getElementById('rolDefectoCompuesto');
+        const rolDefecto = elRol ? elRol.value : null;
+
+        if (!rutaA || !rutaB || condiciones.length === 0 || !codigo || !nombre) {
+            mostrarModalAlerta({
+                titulo: 'Campos Incompletos',
+                mensaje: 'Completa todos los campos obligatorios y define al menos una condición de enlace.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const columnas = [];
+
+        // Columnas de A
+        metadatosA.columnas.forEach((col, idx) => {
+            const inc = document.getElementById(`inc_A_${idx}`).checked;
+            const final = document.getElementById(`final_A_${idx}`).value.trim();
+            const clasif = document.getElementById(`clasif_A_${idx}`).value;
+            if (inc) {
+                columnas.push({
+                    nombreOriginal: col.nombreColumna,
+                    origen: "A",
+                    nombreFinal: final || col.nombreColumna,
+                    clasificacionSemantica: clasif,
+                    esObligatoria: true
+                });
+            }
+        });
+
+        // Columnas de B
+        metadatosB.columnas.forEach((col, idx) => {
+            const inc = document.getElementById(`inc_B_${idx}`).checked;
+            const final = document.getElementById(`final_B_${idx}`).value.trim();
+            const clasif = document.getElementById(`clasif_B_${idx}`).value;
+            if (inc) {
+                columnas.push({
+                    nombreOriginal: col.nombreColumna,
+                    origen: "B",
+                    nombreFinal: final || col.nombreColumna,
+                    clasificacionSemantica: clasif,
+                    esObligatoria: true
+                });
+            }
+        });
+
+        if (columnas.length === 0) {
+            mostrarModalAlerta({
+                titulo: 'Columnas Requeridas',
+                mensaje: 'Debes seleccionar al menos una columna para incluir en el nuevo cubo.',
+                tipo: 'advertencia'
+            });
+            return;
+        }
+
+        const btn = document.getElementById('btnCrearCompuesto');
+        btn.disabled = true;
+        btn.classList.add('opacity-50');
+
+        try {
+            const resp = await fetch('/api/ingesta/crear-cubo-compuesto', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    codigoNuevoCubo: codigo,
+                    nombreNuevoCubo: nombre,
+                    rutaOrigenA: rutaA,
+                    rutaOrigenB: rutaB,
+                    claveOrigenA: condiciones[0].claveOrigenA,
+                    claveOrigenB: condiciones[0].claveOrigenB,
+                    condiciones: condiciones,
+                    tipoJoin: tipoJoin,
+                    columnas: columnas,
+                    rolPorDefectoId: rolDefecto
+                })
+            });
+
+            const data = await resp.json();
+            if (data.exito) {
+                mostrarModalExitoCubo({
+                    idCubo: data.idCubo,
+                    nombreCubo: data.nombreCubo || codigo,
+                    totalFilas: data.totalFilas,
+                    totalColumnas: data.totalColumnas
+                });
+            } else {
+                mostrarModalAlerta({
+                    titulo: 'Error en Cubo Compuesto',
+                    mensaje: data.error || 'Fallo desconocido',
+                    tipo: 'error'
+                });
+            }
+        } catch (err) {
+            mostrarModalAlerta({
+                titulo: 'Error de Comunicación',
+                mensaje: 'Fallo de comunicación con el servidor.',
+                tipo: 'error'
+            });
+        } finally {
+            btn.disabled = false;
+            btn.classList.remove('opacity-50');
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const cuerpo = document.getElementById('cuerpoColumnasDlVisual');
+        if (cuerpo && cuerpo.children.length === 0) {
+            agregarFilaColumnaDl('id_registro', 'BIGINT', 'Categorica/Dimension');
+            agregarFilaColumnaDl('numero_documento', 'VARCHAR', 'Categorica/Dimension');
+            agregarFilaColumnaDl('monto_total', 'DECIMAL(18,2)', 'MetricaSumable');
+            agregarFilaColumnaDl('fecha_registro', 'DATE', 'Temporal');
+            agregarFilaColumnaDl('estado', 'VARCHAR', 'Categorica/Dimension');
+        }
+    });
+</script>
+{% endblock %}
