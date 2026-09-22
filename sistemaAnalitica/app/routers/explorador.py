@@ -15,6 +15,7 @@ from sistemaAnalitica.modulos.seguridad.baseDatos import obtenerSesion
 from sistemaAnalitica.modulos.seguridad.modelos import VistaModelo
 from sistemaAnalitica.modulos.seguridad import ServicioAutorizacion
 from sistemaAnalitica.modulos.motorAnalitico.servicioDuckDb import ServicioDuckDb
+from sistemaAnalitica.modulos.motorAnalitico.servicioPersistenciaCubos import ServicioPersistenciaCubos
 from sistemaAnalitica.modulos.motorAnalitico import ServicioCapaSemantica, ErrorSeguridadGobernanza
 
 router = APIRouter(tags=["Explorador"])
@@ -84,7 +85,7 @@ async def mostrarExplorador(
     if not vistaActual:
         vistaActual = vistas[0]
 
-    rutaParquet = vistaActual.rutaArchivoParquet
+    rutaParquet = ServicioPersistenciaCubos.asegurarParquetVista(vistaActual) or vistaActual.rutaArchivoParquet
     if not rutaParquet or not os.path.exists(rutaParquet):
         return templates.TemplateResponse(
             request=request,

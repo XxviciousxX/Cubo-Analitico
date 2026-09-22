@@ -6,7 +6,7 @@ Utiliza SQLAlchemy 2.0 y sigue la convención de nomenclatura camelCase en atrib
 from datetime import datetime
 from typing import Optional, List, Any, Dict
 from sqlalchemy import (
-    Column, Integer, String, Boolean, DateTime, ForeignKey, Text
+    Column, Integer, String, Boolean, DateTime, ForeignKey, Text, LargeBinary
 )
 from sqlalchemy.orm import declarative_base, relationship
 
@@ -145,6 +145,7 @@ class CuboModelo(BaseModelo):
     estadoHabilitado = Column("estado_habilitado", Boolean, default=True, nullable=False)
     fechaUltimaCarga = Column("fecha_ultima_carga", DateTime, default=datetime.utcnow, nullable=False)
     metadatosColumnasJson = Column("metadatos_columnas_json", Text, nullable=True)
+    archivoBinario = Column("archivo_binario", LargeBinary, nullable=True)
     fechaCreacion = Column("fecha_creacion", DateTime, default=datetime.utcnow, nullable=False)
 
     vistas = relationship("VistaModelo", back_populates="cubo")

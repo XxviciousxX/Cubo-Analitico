@@ -107,12 +107,17 @@ app.include_router(routerAdministracion)
 app.include_router(routerBaseDatos)
 
 
+from sistemaAnalitica.modulos.motorAnalitico.servicioPersistenciaCubos import ServicioPersistenciaCubos
+
+
 @app.on_event("startup")
 def inicializarAplicacion():
     """
-    Inicializa la base de datos relacional y siembra los roles y usuarios iniciales.
+    Inicializa la base de datos relacional, asegura migraciones de esquema
+    y auto-restaura los cubos Parquet desde Supabase al disco local del contenedor.
     """
     inicializarBaseDatos()
+    ServicioPersistenciaCubos.sincronizarTodosLosCubos()
 
 
 # ----------------- MANEJADOR GLOBAL DE ERRORES Y PÁGINA DEDICADA -----------------

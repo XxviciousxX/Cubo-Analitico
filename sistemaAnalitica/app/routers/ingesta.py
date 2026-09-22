@@ -21,6 +21,7 @@ from sistemaAnalitica.modulos.ingesta.validadorContratos import ValidadorContrat
 from sistemaAnalitica.modulos.ingesta.generadorOBT import GeneradorOBT
 from sistemaAnalitica.modulos.ingesta.gestorSqlEnVivo import GestorSqlEnVivo
 from sistemaAnalitica.modulos.ingesta.generadorCuboCompuesto import GeneradorCuboCompuesto
+from sistemaAnalitica.modulos.motorAnalitico.servicioPersistenciaCubos import ServicioPersistenciaCubos
 from sistemaAnalitica.modulos.ingesta.esquemas import (
     SolicitudCuboCompuesto,
     SolicitudInspeccionClaves,
@@ -244,6 +245,7 @@ async def procesarYGuardarExcel(
 
             idCubo = cubo.idCubo
             nombreRegistrado = cubo.nombreCubo
+            ServicioPersistenciaCubos.persistirBinarioEnCubo(cubo, rutaParquet)
             sesion.commit()
 
         return JSONResponse({
@@ -390,6 +392,7 @@ async def procesarYGuardarCuboSql(
 
             idCubo = cubo.idCubo
             nombreRegistrado = cubo.nombreCubo
+            ServicioPersistenciaCubos.persistirBinarioEnCubo(cubo, rutaParquet)
             sesion.commit()
 
         return JSONResponse({
@@ -533,6 +536,7 @@ async def registrarDataLake(
 
         idCubo = cubo.idCubo
         nombreRegistrado = cubo.nombreCubo
+        ServicioPersistenciaCubos.persistirBinarioEnCubo(cubo, rutaParquet)
         sesion.commit()
 
     return JSONResponse({
@@ -708,6 +712,7 @@ async def apiCrearCuboVacioDataLake(
 
         idCubo = cubo.idCubo
         nombreRegistrado = cubo.nombreCubo
+        ServicioPersistenciaCubos.persistirBinarioEnCubo(cubo, rutaParquet)
         sesion.commit()
 
     return JSONResponse({
@@ -841,6 +846,7 @@ async def crearCuboCompuesto(
 
         idCubo = cubo.idCubo
         nombreRegistrado = cubo.nombreCubo
+        ServicioPersistenciaCubos.persistirBinarioEnCubo(cubo, rutaDestino)
         sesion.commit()
 
     return JSONResponse({
@@ -1030,6 +1036,7 @@ async def procesarYGuardarExcelMultiHoja(
 
             idCubo = cubo.idCubo
             nombreRegistrado = cubo.nombreCubo
+            ServicioPersistenciaCubos.persistirBinarioEnCubo(cubo, rutaParquet)
             sesion.commit()
 
         return JSONResponse({
@@ -1195,6 +1202,7 @@ async def procesarYGuardarExcelEstrella(
 
             idCubo = cubo.idCubo
             nombreRegistrado = cubo.nombreCubo
+            ServicioPersistenciaCubos.persistirBinarioEnCubo(cubo, rutaParquet)
             sesion.commit()
 
         return JSONResponse({

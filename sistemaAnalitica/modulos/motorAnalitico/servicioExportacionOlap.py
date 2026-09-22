@@ -58,7 +58,8 @@ class ServicioExportacionOlap:
         Construye la consulta SQL DuckDB sobre el grano permitido de la vista:
         Retorna (sqlConteo, sqlDatos, listaDimensiones, listaMetricasInfo).
         """
-        rutaParquet = vista.rutaArchivoParquet
+        from sistemaAnalitica.modulos.motorAnalitico.servicioPersistenciaCubos import ServicioPersistenciaCubos
+        rutaParquet = ServicioPersistenciaCubos.asegurarParquetVista(vista) or vista.rutaArchivoParquet
         if not rutaParquet or not os.path.exists(rutaParquet):
             raise FileNotFoundError(f"El archivo Parquet de la vista '{vista.codigoVista}' no existe.")
 

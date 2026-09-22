@@ -22,6 +22,7 @@ from sistemaAnalitica.modulos.ingesta.validadorContratos import ValidadorContrat
 from sistemaAnalitica.modulos.ingesta.generadorOBT import GeneradorOBT
 from sistemaAnalitica.modulos.ingesta.gestorSqlEnVivo import GestorSqlEnVivo
 from sistemaAnalitica.modulos.ingesta.generadorCuboCompuesto import GeneradorCuboCompuesto
+from sistemaAnalitica.modulos.motorAnalitico.servicioPersistenciaCubos import ServicioPersistenciaCubos
 
 
 class ServicioGestionCubos:
@@ -361,6 +362,7 @@ class ServicioGestionCubos:
                     cubo.fechaUltimaCarga = datetime.utcnow()
                     for v in cubo.vistas:
                         v.fechaUltimaEjecucion = cubo.fechaUltimaCarga
+                    ServicioPersistenciaCubos.persistirBinarioEnCubo(cubo, rutaParquet)
                     sesion.commit()
 
                     return {
@@ -413,6 +415,7 @@ class ServicioGestionCubos:
                     cubo.fechaUltimaCarga = datetime.utcnow()
                     for v in cubo.vistas:
                         v.fechaUltimaEjecucion = cubo.fechaUltimaCarga
+                    ServicioPersistenciaCubos.persistirBinarioEnCubo(cubo, rutaParquet)
                     sesion.commit()
 
                     return {
@@ -515,6 +518,7 @@ class ServicioGestionCubos:
                 cubo.fechaUltimaCarga = datetime.utcnow()
                 for v in cubo.vistas:
                     v.fechaUltimaEjecucion = cubo.fechaUltimaCarga
+                ServicioPersistenciaCubos.persistirBinarioEnCubo(cubo, rutaParquet)
                 sesion.commit()
 
                 return {
@@ -566,6 +570,7 @@ class ServicioGestionCubos:
                 cubo.fechaUltimaCarga = datetime.utcnow()
                 for v in cubo.vistas:
                     v.fechaUltimaEjecucion = cubo.fechaUltimaCarga
+                ServicioPersistenciaCubos.persistirBinarioEnCubo(cubo, rutaParquet)
                 sesion.commit()
 
                 return {
@@ -852,25 +857,27 @@ class ServicioGestionCubos:
                     except Exception:
                         pass
 
-                # Si no hay columnas en JSON y el Parquet existe, inspeccionar con DuckDB
-                if not columnas and c.archivoParquet and os.path.exists(c.archivoParquet):
-                    try:
-                        con = duckdb.connect()
-                        rutaSql = cls.normalizarRutaSql(c.archivoParquet)
-                        desc = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{rutaSql}') LIMIT 1").fetchall()
-                        con.close()
-                        for row in desc:
-                            nombre = row[0]
-                            tipo = str(row[1]).upper()
-                            esNum = any(t in tipo for t in ["INT", "DOUBLE", "FLOAT", "DECIMAL", "NUMERIC"])
-                            clasif = "MetricaSumable" if esNum else "Categorica/Dimension"
-                            columnas.append({
-                                "nombre": nombre,
-                                "tipo": tipo,
-                                "clasificacion": clasif
-                            })
-                    except Exception:
-                        pass
+                # Si no hay columnas en JSON, asegurar Parquet en disco e inspeccionar con DuckDB
+                if not columnas and c.archivoParquet:
+                    ServicioPersistenciaCubos.asegurarParquetEnDisco(c, sesion)
+                    if os.path.exists(c.archivoParquet):
+                        try:
+                            con = duckdb.connect()
+                            rutaSql = cls.normalizarRutaSql(c.archivoParquet)
+                            desc = con.execute(f"DESCRIBE SELECT * FROM read_parquet('{rutaSql}') LIMIT 1").fetchall()
+                            con.close()
+                            for row in desc:
+                                nombre = row[0]
+                                tipo = str(row[1]).upper()
+                                esNum = any(t in tipo for t in ["INT", "DOUBLE", "FLOAT", "DECIMAL", "NUMERIC"])
+                                clasif = "MetricaSumable" if esNum else "Categorica/Dimension"
+                                columnas.append({
+                                    "nombre": nombre,
+                                    "tipo": tipo,
+                                    "clasificacion": clasif
+                                })
+                        except Exception:
+                            pass
 
                 resultado.append({
                     "idCubo": c.idCubo,

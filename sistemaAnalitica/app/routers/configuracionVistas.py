@@ -23,6 +23,7 @@ from sistemaAnalitica.app.dependencias import (
     requerirPermisoPantalla
 )
 from sistemaAnalitica.modulos.presentacion.sugeridorGraficos import SugeridorGraficos
+from sistemaAnalitica.modulos.motorAnalitico.servicioPersistenciaCubos import ServicioPersistenciaCubos
 import duckdb
 from fastapi.templating import Jinja2Templates
 
@@ -50,6 +51,8 @@ async def vistaConfigurador(
 
         if idVista:
             vistaSeleccionada = db.query(VistaModelo).filter(VistaModelo.idVista == idVista).first()
+        if vistaSeleccionada:
+            ServicioPersistenciaCubos.asegurarParquetVista(vistaSeleccionada, db)
         if vistaSeleccionada and vistaSeleccionada.rutaArchivoParquet and os.path.exists(vistaSeleccionada.rutaArchivoParquet):
             rutaSql = vistaSeleccionada.rutaArchivoParquet.replace("\\", "/")
             try:

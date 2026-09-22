@@ -28,6 +28,13 @@ class GeneradorCuboCompuesto:
         """
         Inspecciona el esquema, tipos de datos y total de registros de un archivo Parquet.
         """
+        if not os.path.exists(rutaParquet) or os.path.getsize(rutaParquet) == 0:
+            try:
+                from sistemaAnalitica.modulos.motorAnalitico.servicioPersistenciaCubos import ServicioPersistenciaCubos
+                ServicioPersistenciaCubos.asegurarParquetPorRuta(rutaParquet)
+            except Exception:
+                pass
+
         if not os.path.exists(rutaParquet):
             raise FileNotFoundError(f"Archivo Parquet no encontrado: {rutaParquet}")
 
@@ -313,6 +320,20 @@ class GeneradorCuboCompuesto:
         Ejecuta el cruce relacional vectorizado en DuckDB con soporte para claves simples
         o compuestas (múltiples condiciones AND) y exporta hacia Parquet ZSTD.
         """
+        if not os.path.exists(rutaOrigenA) or os.path.getsize(rutaOrigenA) == 0:
+            try:
+                from sistemaAnalitica.modulos.motorAnalitico.servicioPersistenciaCubos import ServicioPersistenciaCubos
+                ServicioPersistenciaCubos.asegurarParquetPorRuta(rutaOrigenA)
+            except Exception:
+                pass
+
+        if not os.path.exists(rutaOrigenB) or os.path.getsize(rutaOrigenB) == 0:
+            try:
+                from sistemaAnalitica.modulos.motorAnalitico.servicioPersistenciaCubos import ServicioPersistenciaCubos
+                ServicioPersistenciaCubos.asegurarParquetPorRuta(rutaOrigenB)
+            except Exception:
+                pass
+
         if not os.path.exists(rutaOrigenA) or not os.path.exists(rutaOrigenB):
             raise FileNotFoundError("Una o ambas rutas de Parquet no existen.")
 

@@ -111,7 +111,12 @@ class ServicioCapaSemantica:
         """
         with obtenerSesion() as sesion:
             vista = sesion.query(VistaModelo).filter_by(codigoVista=codigoVista, activo=True).first()
-            if not vista or not vista.rutaArchivoParquet or not os.path.exists(vista.rutaArchivoParquet):
+            if not vista:
+                raise FileNotFoundError(f"Vista '{codigoVista}' no encontrada en el sistema.")
+
+            from .servicioPersistenciaCubos import ServicioPersistenciaCubos
+            rutaParquet = ServicioPersistenciaCubos.asegurarParquetVista(vista, sesion) or vista.rutaArchivoParquet
+            if not rutaParquet or not os.path.exists(rutaParquet):
                 raise FileNotFoundError(f"Archivo Parquet o vista '{codigoVista}' no disponible.")
 
             # Verificación del ciclo de vida de la vista y del cubo subyacente
@@ -120,8 +125,6 @@ class ServicioCapaSemantica:
 
             if vista.cubo and not vista.cubo.estadoHabilitado:
                 raise ErrorSeguridadGobernanza("El cubo subyacente se encuentra inactivo")
-
-            rutaParquet = vista.rutaArchivoParquet
 
             # Obtener configuración si existe
             configuracion = None

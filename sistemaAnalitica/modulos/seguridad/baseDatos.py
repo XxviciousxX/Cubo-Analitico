@@ -23,7 +23,7 @@ if os.path.exists(rutaEnv):
 else:
     load_dotenv()
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker, Session
 
 from sistemaAnalitica.modulos.seguridad.modelos import (
@@ -107,6 +107,39 @@ except Exception as errorConexion:
     motorActivo = "SQLITE"
 
 FabricaSesiones = sessionmaker(bind=motorBaseDatos, autocommit=False, autoflush=False, expire_on_commit=False)
+
+
+def migrarEsquemaPersistenciaCubos():
+    """
+    Garantiza que la columna archivo_binario exista en la tabla cubos sin alterar datos existentes.
+    Compatible con PostgreSQL, SQLite y SQL Server.
+    """
+    try:
+        with motorBaseDatos.begin() as con:
+            if motorActivo == "POSTGRESQL":
+                con.execute(text("ALTER TABLE cubos ADD COLUMN IF NOT EXISTS archivo_binario BYTEA;"))
+            elif motorActivo == "SQLITE":
+                try:
+                    infoCols = [r[1] for r in con.execute(text("PRAGMA table_info(cubos);")).fetchall()]
+                    if infoCols and "archivo_binario" not in infoCols:
+                        con.execute(text("ALTER TABLE cubos ADD COLUMN archivo_binario BLOB;"))
+                except Exception:
+                    pass
+            elif motorActivo == "SQLSERVER":
+                con.execute(text("""
+                    IF NOT EXISTS (
+                        SELECT * FROM sys.columns 
+                        WHERE object_id = OBJECT_ID('cubos') AND name = 'archivo_binario'
+                    )
+                    ALTER TABLE cubos ADD archivo_binario VARBINARY(MAX) NULL;
+                """))
+        loggerBaseDatos.info("Esquema de persistencia de cubos verificado exitosamente.")
+    except Exception as err:
+        loggerBaseDatos.warning(f"Aviso al verificar columna archivo_binario: {err}")
+
+
+# Ejecutar migración preventiva de esquema al cargar el módulo
+migrarEsquemaPersistenciaCubos()
 
 
 def obtenerInfoMotorActivo() -> dict:
