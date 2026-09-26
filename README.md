@@ -12,20 +12,40 @@
 
 ---
 
+## 🌐 Acceso al DEMO en Vivo (Render)
+
+La plataforma se encuentra completamente desplegada, operativa y accesible en internet para pruebas inmediatas en la nube:
+
+* 🔗 **URL de la Aplicación en Producción:** [https://cuboanalitico.onrender.com](https://cuboanalitico.onrender.com) *(o la URL de tu Web Service activo en Render)*
+* 🟢 **Estado del Servicio:** En línea (24/7 con SSL/HTTPS automático).
+* 💻 **Compatibilidad:** Accesible desde cualquier navegador web moderno (Chrome, Edge, Firefox, Safari) sin requerir instalación previa.
+
+### 👥 Usuarios y Contraseñas de Prueba para el DEMO
+
+Para evaluar los diferentes niveles de acceso, perfiles de seguridad (**RBAC**) y funcionalidades del sistema, utiliza las siguientes credenciales preconfiguradas:
+
+| Usuario | Contraseña | Rol Asignado | Pantallas Habilitadas | ¿Qué puedes evaluar en el DEMO? |
+| :--- | :--- | :--- | :--- | :--- |
+| **`admin`** | `admin` | **Administrador** | **Acceso Total (8 pantallas):** Inicio, Ingesta OBT, Explorador OLAP, Gobernanza y Roles, Configuración de Vistas, Gestión de Cubos, Gestión de Vistas y Depuración de Objetos. | Gestión integral de usuarios, asignación de pantallas, control de permisos, ingesta de archivos y administración del catálogo. |
+| **`analista`** | `analista` | **Analista de Datos** | **Acceso Analítico (7 pantallas):** Inicio, Ingesta OBT, Explorador OLAP, Configuración de Vistas, Gestión de Cubos, Gestión de Vistas y Depuración. | Carga masiva de datos, creación de cubos multidimensionales, configuración de gráficos y exploración analítica con métricas calculadas. |
+| **`operador`** | `operador` | **Operador** | **Acceso Operativo (2 pantallas):** Inicio y Explorador OLAP. | Consulta de tableros ejecutivos, interacción con filtros dinámicos y exportación directa de reportes a Excel con un clic. |
+
+---
+
 ## 📋 Tabla de Contenidos
 
 1. [a. Descripción General del Proyecto](#a-descripción-general-del-proyecto)
 2. [b. Stack Tecnológico Utilizado](#b-stack-tecnológico-utilizado)
-3. [c. Instalación y Ejecución](#c-instalación-y-ejecución)
-   - [3.1 Prerrequisitos y Configuración de Variables de Entorno](#31-prerrequisitos-y-configuración-de-variables-de-entorno)
-   - [3.2 Ejecución en Entorno Local](#32-ejecución-en-entorno-local)
-   - [3.3 Despliegue en Producción (Render + Supabase)](#33-despliegue-en-producción-render--supabase)
-   - [3.4 Contenerización con Docker](#34-contenerización-con-docker)
+3. [c. Instalación y Ejecución Local y en la Nube](#c-instalación-y-ejecución)
+   - [3.1 Levantamiento Local Rápido (Zero-Config / SQLite Automático)](#31-levantamiento-local-rápido-zero-config--sqlite-automático)
+   - [3.2 Conexión a Supabase PostgreSQL](#32-conexión-a-supabase-postgresql)
+   - [3.3 Despliegue en Render](#33-despliegue-en-producción-render--supabase)
 4. [d. Estructura del Proyecto](#d-estructura-del-proyecto)
 5. [e. Funcionalidades Principales](#e-funcionalidades-principales)
-6. [f. Usuarios y Contraseñas de Prueba](#f-usuarios-y-contraseñas-de-prueba)
-7. [Especificación de Variables de Entorno](#-especificación-de-variables-de-entorno)
-8. [Catálogo de Endpoints API](#-catálogo-de-endpoints-api)
+6. [f. Modelo Relacional de Cubos y Consultas SQL de Prueba (5,000 Registros)](#f-modelo-relacional-de-cubos-y-consultas-sql-de-prueba-5000-registros)
+7. [g. Dataset de Prueba en Git (`datosPrueba/`)](#g-dataset-de-prueba-en-git-datosprueba)
+8. [Especificación de Variables de Entorno](#-especificación-de-variables-de-entorno)
+9. [Catálogo de Endpoints API](#-catálogo-de-endpoints-api)
 
 ---
 
@@ -90,8 +110,6 @@ Cubix desacopla completamente el almacenamiento transaccional de la capa de cons
 
 ## b. Stack Tecnológico Utilizado
 
-El sistema está construido combinando tecnologías modernas de alto desempeño, garantizando bajo consumo de recursos y alta escalabilidad:
-
 | Componente / Capa | Tecnología | Justificación y Rol en el Sistema |
 | :--- | :--- | :--- |
 | **Backend & Servidor Web** | **FastAPI** (Python 3.11+) | Framework web asíncrono de alto rendimiento (ASGI), organizado en routers modulares para autenticación, ingesta, administración y OLAP. |
@@ -111,178 +129,129 @@ El sistema está construido combinando tecnologías modernas de alto desempeño,
 
 ## c. Instalación y Ejecución
 
-### 3.1 Prerrequisitos y Configuración de Variables de Entorno
+### 3.1 Levantamiento Local Rápido (Zero-Config / SQLite Automático)
 
-* **Python:** Versión 3.11 o superior instalada en el sistema.
-* **Conexión a Base de Datos:** Cadena de conexión `DATABASE_URL` a Supabase PostgreSQL (o uso del motor local SQLite por defecto).
+> [!TIP]
+> **Zero-Config:** No es obligatorio configurar ningún archivo `.env` para probar el sistema en tu computadora. El sistema detecta automáticamente la ausencia de variables de entorno y utiliza una base de datos local SQLite (`controlAnalitica.db`), inicializando y sembrando todas las tablas y usuarios de prueba al arrancar.
 
-#### Configurar el archivo `.env`
-1. Copie la plantilla base:
+1. **Clonar el repositorio y entrar en la carpeta del proyecto:**
    ```bash
-   # En Windows (CMD / PowerShell):
-   copy .env.example .env
-
-   # En Linux / macOS:
-   cp .env.example .env
-   ```
-2. Configure su cadena de conexión en el archivo `.env`:
-   ```env
-   # Conexión a Supabase PostgreSQL (Producción / Remota):
-   DATABASE_URL=postgresql://postgres.TU_REF:TU_PASSWORD@aws-0-us-west-2.pooler.supabase.com:5432/postgres
-
-   # O conexión local SQLite (Desarrollo sin conexión externa):
-   # DATABASE_URL=sqlite:///sistemaAnalitica/almacenamiento/controlAnalitica.db
-
-   PORT=8000
-   HOST=0.0.0.0
-   ENTORNO=desarrollo
-   SECRET_KEY=clave_secreta_para_firma_de_sesion_segura
+   git clone https://github.com/TU_USUARIO/TU_REPOSITORIO.git
+   cd export
    ```
 
----
-
-### 3.2 Ejecución en Entorno Local
-
-1. **Crear y activar el entorno virtual:**
+2. **Crear y activar el entorno virtual:**
    ```bash
-   # Crear entorno virtual
+   # En Windows:
    python -m venv .venv
-
-   # Activar en Windows:
    .\.venv\Scripts\activate
 
-   # Activar en Linux / macOS:
+   # En Linux / macOS:
+   python3 -m venv .venv
    source .venv/bin/activate
    ```
 
-2. **Instalar dependencias:**
+3. **Instalar dependencias:**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Inicializar y poblar la Base de Datos (Primer uso):**
+4. **Poblar las tablas relacionales de prueba (5,000 registros cada una):**
    ```bash
-   # Para Supabase PostgreSQL:
-   python baseDatos/recrearBaseDatos.py --motor postgres --forzar
-   python baseDatos/generarDatosPrueba.py
-
-   # O para SQLite local:
-   python baseDatos/recrearBaseDatos.py --motor sqlite --forzar
+   python baseDatos/crearTablasRelacionadas.py --motor sqlite
    ```
 
-4. **Iniciar la aplicación:**
-   * **En Windows con un clic:** Ejecutar el archivo `iniciarSistema.bat`.
-   * **Mediante consola de comandos:**
+5. **Iniciar el servidor:**
+   * **En Windows con 1 clic:** Doble clic en `iniciarSistema.bat`.
+   * **Por terminal:**
      ```bash
      uvicorn sistemaAnalitica.app.servidor:app --host 0.0.0.0 --port 8000 --reload
      ```
+   * Abre tu navegador en `http://localhost:8000` e inicia sesión con `admin` / `admin`.
 
-5. **Acceder a la plataforma:**
-   Abra su navegador web e ingrese a `http://localhost:8000`.
+---
+
+### 3.2 Conexión a Supabase PostgreSQL
+
+Si deseas ejecutar localmente pero conectado a la base de datos central en Supabase:
+
+1. Copia la plantilla de entorno:
+   ```bash
+   copy .env.example .env   # En Windows
+   cp .env.example .env     # En Linux / Mac
+   ```
+2. Edita el archivo `.env` e ingresa tu cadena de conexión:
+   ```env
+   DATABASE_URL=postgresql://postgres.TU_REF:TU_PASSWORD@aws-0-us-west-2.pooler.supabase.com:5432/postgres
+   ENTORNO=desarrollo
+   SECRET_KEY=clave_secreta_super_segura
+   ```
+3. Si deseas regenerar o poblar las 3 tablas relacionales en Supabase:
+   ```bash
+   python baseDatos/crearTablasRelacionadas.py --motor postgres
+   ```
 
 ---
 
 ### 3.3 Despliegue en Producción (Render + Supabase)
 
-El proyecto está configurado para ejecutarse de forma nativa en **Render**:
+El proyecto está optimizado para ejecutarse nativamente en **Render**:
 
-1. **Crear un nuevo Web Service en Render:**
-   * Conecte su repositorio de GitHub a Render.
-   * Seleccione el entorno de ejecución: **Python 3**.
-   * **Root Directory:** `./` (o el directorio raíz donde reside el proyecto).
-2. **Configuración de Comandos de Construcción y Arranque:**
-   * **Build Command:**
-     ```bash
-     pip install -r requirements.txt
-     ```
-   * **Start Command:**
-     ```bash
-     uvicorn sistemaAnalitica.app.servidor:app --host 0.0.0.0 --port $PORT
-     ```
-3. **Variables de Entorno en el Dashboard de Render:**
-   Agregue las siguientes claves en la sección *Environment Variables*:
-   * `DATABASE_URL`: Cadena de conexión `postgresql://...` provista por Supabase (se recomienda usar el *Connection Pooling* en puerto 5432 o 6543).
+1. En el panel de Render, crea un **Web Service** conectado a tu repositorio de GitHub.
+2. Configura los parámetros de ejecución:
+   * **Runtime:** `Python 3`
+   * **Build Command:** `pip install -r requirements.txt`
+   * **Start Command:** `uvicorn sistemaAnalitica.app.servidor:app --host 0.0.0.0 --port $PORT`
+3. Agrega las variables de entorno en Render:
+   * `DATABASE_URL`: Cadena de conexión provista por Supabase (Connection Pooling puerto 5432 o 6543).
    * `ENTORNO`: `produccion`
-   * `SECRET_KEY`: Cadena aleatoria segura para el cifrado de sesiones.
-   * `PYTHON_VERSION`: `3.11.9`
-
----
-
-### 3.4 Contenerización con Docker
-
-El repositorio incluye un `Dockerfile` optimizado y multi-stage listo para correr en cualquier nube:
-
-```bash
-# 1. Construir la imagen Docker
-docker build -t cubix-analytics:latest .
-
-# 2. Ejecutar el contenedor vinculando el archivo .env
-docker run -d -p 8080:8080 --env-file .env --name cubix_app cubix-analytics:latest
-```
-Acceso: `http://localhost:8080`
+   * `SECRET_KEY`: Cadena criptográfica aleatoria para la firma de sesiones.
 
 ---
 
 ## d. Estructura del Proyecto
 
-La arquitectura del proyecto sigue una separación clara de responsabilidades:
-
 ```text
 export/
-├── .env.example                 # Plantilla de variables de entorno (sin credenciales sensibles)
-├── .gitignore                   # Reglas estrictas de exclusión para Git (oculta .env, .venv, etc.)
-├── .dockerignore                # Exclusiones para construcción óptima de imágenes Docker
-├── Dockerfile                   # Especificación de contenedor Docker para producción
-├── README.md                    # Documentación técnica completa y detallada del proyecto
-├── STARTGUIDE.md                # Guía de especificaciones de bajo nivel para agentes y desarrollo
-├── requirements.txt             # Dependencias Python fijadas para pip, Render y Docker
-├── iniciarSistema.bat           # Script de inicio en 1 clic para entornos Windows
+├── .env.example                 # Plantilla de variables de entorno (sin credenciales)
+├── .gitignore                   # Reglas estrictas de exclusión (incluye datosPrueba/)
+├── .dockerignore                # Exclusiones para imágenes Docker
+├── Dockerfile                   # Contenedor listo para producción en la nube
+├── README.md                    # Documentación técnica maestra del proyecto
+├── STARTGUIDE.md                # Especificaciones internas de bajo nivel
+├── requirements.txt             # Dependencias del ecosistema Python
+├── iniciarSistema.bat           # Script de inicio en 1 clic para Windows
 │
-├── baseDatos/                   # Scripts de gestión relacional, esquemas y datos de prueba
-│   ├── esquemas/                # Esquemas DDL SQL de referencia (PostgreSQL y SQLite)
-│   │   ├── schema_sqlserver.sql
-│   │   └── schema_sqlite.sql
-│   ├── recrearBaseDatos.py      # Script de purga y regeneración limpia de tablas en Supabase / SQLite
-│   ├── generarDatosPrueba.py    # Generador del dataset de ventas y tabla relacional de ingesta
-│   ├── probarIngestaExcel.py    # Pruebas automatizadas del motor de ingesta de archivos
-│   ├── limpiarCatalogo.py       # Utilidad para saneamiento de registros huérfanos del catálogo
-│   └── verificarTodo.py         # Script de verificación integral del estado del sistema
+├── baseDatos/                   # Scripts de gestión relacional y sembrado
+│   ├── crearTablasRelacionadas.py # Generador de dim_clientes, dim_productos y fact_ventas (5,000 c/u)
+│   ├── recrearBaseDatos.py      # Purga y regeneración limpia del esquema en Supabase / SQLite
+│   ├── generarDatosPrueba.py    # Generador complementario de tickets help desk y ventas Excel
+│   ├── limpiarCatalogo.py       # Mantenimiento y depuración de registros huérfanos
+│   ├── verificarTodo.py         # Diagnóstico integral de conectividad e integridad
+│   └── esquemas/                # DDL SQL de referencia (PostgreSQL, SQLite, SQL Server)
 │
-├── datosPrueba/                 # Datasets de prueba locales
-│   └── ventas_10000.xlsx        # Dataset con 10,000 registros para pruebas de ingesta y rendimiento
+├── datosPrueba/                 # Datasets de prueba incluidos en Git
+│   ├── README.md                # Guía de uso del dataset para evaluadores del DEMO
+│   └── ventas_10000.xlsx        # 10,000 registros para pruebas de ingesta ultrarrápida
 │
 └── sistemaAnalitica/            # Código fuente principal de la plataforma
-    ├── almacenamiento/          # Persistencia física de datos
-    │   ├── controlAnalitica.db  # Base de datos SQLite local de control (fallback)
-    │   └── parquets/            # Archivos .parquet generados por el Data Lake
+    ├── almacenamiento/          # Almacenamiento local del Data Lake
+    │   ├── controlAnalitica.db  # Base relacional SQLite local (auto-generada)
+    │   └── parquets/            # Archivos .parquet generados dinámicamente
     │
     ├── app/                     # Capa web y controladores FastAPI
-    │   ├── servidor.py          # Punto de entrada de la aplicación FastAPI y middlewares
-    │   ├── dependencias.py      # Middleware de autenticación, control de sesiones y RBAC
-    │   ├── routers/             # Módulos de endpoints separados por dominio funcional
-    │   │   ├── autenticacion.py # Gestión de login, logout y sesiones seguras
-    │   │   ├── inicio.py        # Dashboard principal y resumen de métricas del sistema
-    │   │   ├── ingesta.py       # Endpoints de subida, análisis Calamine y cruce OBT
-    │   │   ├── explorador.py    # Endpoints de consulta OLAP vectorizada con DuckDB
-    │   │   ├── seguridad.py     # Endpoints de administración de usuarios, roles y RLS
-    │   │   ├── administracion.py# Mantenimiento de cubos, vistas y limpieza de metadatos
-    │   │   ├── configuracionVistas.py # Diseñador de vistas analíticas asociadas
-    │   │   └── baseDatosRouter.py     # Gestión de conexiones relacionales en vivo
-    │   ├── static/              # Recursos estáticos web (Tailwind CSS, JS, imágenes, SVG)
-    │   └── templates/           # Plantillas Jinja2 (HTML5 semántico, layouts, modales)
+    │   ├── servidor.py          # Punto de entrada FastAPI y middlewares de sesión
+    │   ├── dependencias.py      # Middleware de autenticación y RBAC
+    │   ├── routers/             # Endpoints (autenticación, explorador, ingesta, admin)
+    │   ├── static/              # Recursos estáticos (Tailwind CSS, JS, iconos SVG)
+    │   └── templates/           # Vistas Jinja2 renderizadas con Tailwind CSS
     │
-    ├── modulos/                 # Lógica de dominio y motores analíticos
-    │   ├── ingesta/             # Lector Calamine Rust, generador OBT, gestor SQL en vivo
-    │   ├── motorAnalitico/      # Motor DuckDB OLAP, perfilador columnar y transformaciones
-    │   ├── seguridad/           # Modelos SQLAlchemy, sesiones de BD, RBAC y auditoría
-    │   ├── autenticacion/       # Estrategias de login (Local PBKDF2, LDAP, SOAP)
-    │   ├── presentacion/        # Componentes de presentación, estilos y vistas
-    │   └── mcp/                 # Servidor Model Context Protocol para asistentes inteligentes
-    │
-    └── documentacion/           # Especificaciones arquitectónicas internas
-        ├── ARQUITECTURA.md      # Memoria técnica de diseño arquitectónico
-        ├── CONTRATOS.md         # Especificación de contratos de datos y payloads
-        └── BITACORA_APRENDIZAJE.md # Registro técnico de evolución del proyecto
+    └── modulos/                 # Lógica de dominio y motores analíticos
+        ├── ingesta/             # Lector Calamine Rust, generador OBT, SQL en vivo
+        ├── motorAnalitico/      # Motor DuckDB OLAP, agregaciones y exportador
+        ├── seguridad/           # Modelos SQLAlchemy, sesiones de BD y RBAC
+        ├── autenticacion/       # Estrategias de login (Local PBKDF2, LDAP, SOAP)
+        └── mcp/                 # Servidor Model Context Protocol para IA
 ```
 
 ---
@@ -292,11 +261,11 @@ export/
 Cubix ofrece un flujo integral de datos desde la captura hasta la toma de decisiones analíticas:
 
 ### 1. Ingesta Inteligente y Modelado One Big Table (OBT)
-* **Extracción Masiva Instantánea con Rust:** Lectura de archivos `.xlsx` y `.xlsb` mediante `python-calamine`, procesando miles de registros por segundo con mínimo consumo de CPU y memoria.
-* **Detección y Unificación Automática de Hojas:** Detección de hojas con estructuras equivalentes (por ejemplo, meses o trimestres) para aplicar `UNION ALL` automático, registrando la columna trazable `hoja_origen`.
-* **Cruce Relacional Multi-Hoja (Diagrama en Estrella):** Interfaz para definir enlaces entre una hoja de hechos principal y múltiples hojas satélites de dimensiones mediante claves compuestas (`LEFT`, `INNER`, `OUTER`).
-* **Prevención de Riesgo Fan-Out:** Análisis predictivo de cardinalidad antes de materializar el cubo, alertando al usuario si un cruce multiplicará artificialmente el volumen de filas.
-* **Consultas SQL en Vivo con Throttling:** Conexión a motores externos (PostgreSQL, SQL Server, Supabase) con muestreo automático (`LIMIT 10`) y ventana de refresco controlado de 5 minutos para proteger bases operacionales contra sobrecargas.
+* **Extracción Masiva Instantánea con Rust:** Lectura de archivos `.xlsx` mediante `python-calamine`, procesando miles de filas en sub-segundos sin sobrecarga de memoria.
+* **Detección y Unificación Automática de Hojas:** Detección de hojas con esquemas idénticos para aplicar `UNION ALL` automático con trazabilidad de `hoja_origen`.
+* **Cruce Relacional Multi-Hoja (Diagrama en Estrella):** Enlace de tablas de hechos con múltiples dimensiones satélites mediante llaves compuestas (`LEFT`, `INNER`, `OUTER`).
+* **Prevención de Riesgo Fan-Out:** Análisis predictivo de cardinalidad antes de materializar el cubo, alertando si un cruce multiplicará artificialmente el volumen de filas.
+* **Consultas SQL en Vivo con Throttling:** Conexión a motores relacionales externos con muestreo automático (`LIMIT 10`) y ventana de refresco controlado de 5 minutos para proteger bases operacionales contra sobrecargas.
 
 ### 2. Motor Analítico OLAP Vectorizado (DuckDB + Parquet)
 * **Consultas Vectorizadas en Memoria:** Ejecución de consultas analíticas multidimensionales directamente sobre los archivos Parquet en sub-segundos, aprovechando paralelismo a nivel de hilos sin cuellos de botella del GIL de Python.
@@ -316,18 +285,144 @@ Cubix ofrece un flujo integral de datos desde la captura hasta la toma de decisi
 
 ---
 
-## f. Usuarios y Contraseñas de Prueba
+## f. Modelo Relacional de Cubos y Consultas SQL de Prueba (5,000 Registros)
 
-El sistema cuenta con tres cuentas de usuario predeterminadas registradas en la base de datos de Supabase PostgreSQL para evaluar los distintos niveles de permisos y seguridad:
+En la base de datos (Supabase PostgreSQL y SQLite local) se encuentran creadas y pobladas **tres tablas relacionales organizadas en Diagrama de Estrella (Star Schema)** con exactamente **5,000 registros en cada tabla**, generadas mediante el script `baseDatos/crearTablasRelacionadas.py`:
 
-| Usuario | Contraseña | Rol Asignado | Privilegios y Pantallas Habilitadas |
-| :--- | :--- | :--- | :--- |
-| **`admin`** | `admin` | **Administrador** | **Acceso Total:** Inicio, Ingesta de Datos, Explorador OLAP, Seguridad y RBAC, Configuración de Vistas, Mantenimiento de Cubos y Auditoría. |
-| **`analista`** | `analista` | **Analista de Datos** | **Acceso Analítico:** Inicio, Ingesta de Datos, Explorador OLAP, Configuración de Vistas y Mantenimiento de Cubos. |
-| **`operador`** | `operador` | **Operador** | **Acceso Operativo:** Inicio, Explorador OLAP (consulta de tableros asignados y exportación de reportes). |
+```mermaid
+erDiagram
+    dim_clientes ||--o{ fact_ventas : "id_cliente (1:N)"
+    dim_productos ||--o{ fact_ventas : "id_producto (1:N)"
 
-> [!NOTE]
-> Todas las contraseñas son validadas contra Supabase PostgreSQL utilizando derivación criptográfica **PBKDF2-HMAC-SHA256** con salt dinámico y 100,000 rondas de hashing.
+    dim_clientes {
+        int id_cliente PK
+        string codigo_cliente
+        string nombre_cliente
+        string segmento
+        string ciudad
+        string pais
+        string canal_adquisicion
+        int antiguedad_anios
+    }
+
+    dim_productos {
+        int id_producto PK
+        string codigo_sku
+        string nombre_producto
+        string categoria
+        string subcategoria
+        float costo_unitario
+        float precio_venta_base
+        string estado
+    }
+
+    fact_ventas {
+        int id_venta PK
+        string numero_orden
+        int id_cliente FK
+        int id_producto FK
+        timestamp fecha_venta
+        string sucursal
+        string metodo_pago
+        int cantidad
+        float precio_unitario
+        float descuento_porcentaje
+        float monto_total
+        float costo_total
+        float margen_bruto
+    }
+```
+
+### 🔍 Consultas SQL (SELECT) de Prueba Listas para Ejecutar
+
+Puedes ejecutar estas consultas directamente en el **SQL Editor de Supabase**, en tu cliente relacional favorito (DBeaver, pgAdmin) o en el módulo de **SQL en Vivo** de Cubix:
+
+#### Consulta 1: Resumen Operativo de Ventas y Márgenes por Sucursal y Medio de Pago
+Calcula el total facturado, margen bruto total y margen promedio agrupado por sucursal física:
+```sql
+SELECT 
+    sucursal,
+    metodo_pago,
+    COUNT(*) AS total_transacciones,
+    SUM(cantidad) AS unidades_vendidas,
+    ROUND(CAST(SUM(monto_total) AS NUMERIC), 2) AS facturacion_total,
+    ROUND(CAST(SUM(margen_bruto) AS NUMERIC), 2) AS ganancia_bruta_total,
+    ROUND(CAST(AVG(margen_bruto) AS NUMERIC), 2) AS margen_promedio_por_orden
+FROM fact_ventas
+GROUP BY sucursal, metodo_pago
+ORDER BY facturacion_total DESC;
+```
+
+#### Consulta 2: Cruzada Multidimensional en Estrella (Ventas + Clientes + Productos)
+Une las tres tablas para analizar la rentabilidad cruzando el **segmento de cliente** con la **categoría de producto**:
+```sql
+SELECT 
+    c.segmento AS segmento_cliente,
+    p.categoria AS categoria_producto,
+    COUNT(v.id_venta) AS ordenes_realizadas,
+    SUM(v.cantidad) AS volumen_unidades,
+    ROUND(CAST(SUM(v.monto_total) AS NUMERIC), 2) AS ingresos_totales,
+    ROUND(CAST(SUM(v.costo_total) AS NUMERIC), 2) AS costo_mercancia,
+    ROUND(CAST(SUM(v.margen_bruto) AS NUMERIC), 2) AS utilidad_neta,
+    ROUND(CAST((SUM(v.margen_bruto) / NULLIF(SUM(v.monto_total), 0)) * 100 AS NUMERIC), 2) AS pct_rentabilidad
+FROM fact_ventas v
+INNER JOIN dim_clientes c ON v.id_cliente = c.id_cliente
+INNER JOIN dim_productos p ON v.id_producto = p.id_producto
+GROUP BY c.segmento, p.categoria
+ORDER BY ingresos_totales DESC;
+```
+
+#### Consulta 3: Top 10 Clientes por Volumen de Facturación y Cobertura Geográfica
+Identifica a los clientes con mayor valor comercial acumulado y su ubicación:
+```sql
+SELECT 
+    c.codigo_cliente,
+    c.nombre_cliente,
+    c.segmento,
+    c.ciudad,
+    c.pais,
+    COUNT(v.id_venta) AS total_pedidos,
+    ROUND(CAST(SUM(v.monto_total) AS NUMERIC), 2) AS monto_acumulado_comprado
+FROM fact_ventas v
+INNER JOIN dim_clientes c ON v.id_cliente = c.id_cliente
+GROUP BY c.codigo_cliente, c.nombre_cliente, c.segmento, c.ciudad, c.pais
+ORDER BY monto_acumulado_comprado DESC
+LIMIT 10;
+```
+
+#### Consulta 4: Rendimiento por Categoría y Subcategoría de Producto
+Permite identificar las líneas de producto con mayor penetración de clientes únicos y mayor volumen transaccionado:
+```sql
+SELECT 
+    p.categoria,
+    p.subcategoria,
+    COUNT(DISTINCT v.id_cliente) AS clientes_unicos_compradores,
+    COUNT(v.id_venta) AS numero_ventas,
+    SUM(v.cantidad) AS total_unidades_comercializadas,
+    ROUND(CAST(SUM(v.monto_total) AS NUMERIC), 2) AS facturacion_total,
+    ROUND(CAST(AVG(v.descuento_porcentaje) AS NUMERIC), 2) AS descuento_promedio_otorgado
+FROM fact_ventas v
+INNER JOIN dim_productos p ON v.id_producto = p.id_producto
+GROUP BY p.categoria, p.subcategoria
+ORDER BY facturacion_total DESC;
+```
+
+---
+
+## g. Dataset de Prueba en Git (`datosPrueba/`)
+
+Para facilitar la evaluación de la ingesta de archivos en el **DEMO en Render** o en local, el repositorio incluye en la carpeta [`datosPrueba/`](file:///c:/Users/MAURICIO/Documents/Antigravity/CuboAnalitico/export/datosPrueba) el dataset:
+
+* 📄 **Archivo:** `datosPrueba/ventas_10000.xlsx`
+* 📊 **Volumen:** 10,000 registros transaccionales reales.
+* 📋 **Columnas:** `numero_venta`, `fecha_venta`, `sucursal`, `vendedor`, `producto`, `categoria`, `precio_unitario`, `cantidad`, `monto_total`.
+
+### ¿Cómo probarlo en el DEMO de Render?
+1. Descarga el archivo [`ventas_10000.xlsx`](datosPrueba/ventas_10000.xlsx) desde este repositorio a tu computadora.
+2. Ingresa al [DEMO en Render](https://cuboanalitico.onrender.com) con el usuario `admin` o `analista`.
+3. Dirígete a **Ingesta de Datos** (`/ingesta`).
+4. Arrastra o selecciona `ventas_10000.xlsx`. El motor Calamine (Rust) procesará las 10,000 filas en menos de 2 segundos generando un archivo Parquet optimizado.
+5. Pasa al **Explorador Analítico** (`/explorador`) para filtrar dinámicamente y generar gráficos instantáneos.
 
 ---
 
@@ -335,10 +430,10 @@ El sistema cuenta con tres cuentas de usuario predeterminadas registradas en la 
 
 | Variable | Tipo | Requerida | Valor por Defecto | Descripción |
 | :--- | :--- | :--- | :--- | :--- |
-| `DATABASE_URL` | String | **Sí** (en producción) | `sqlite:///sistemaAnalitica/...` | Cadena de conexión SQLAlchemy a Supabase PostgreSQL o SQLite local. |
+| `DATABASE_URL` | String | No (usa SQLite por defecto) | `sqlite:///sistemaAnalitica/...` | Cadena de conexión SQLAlchemy a Supabase PostgreSQL o SQLite local. |
 | `PORT` | Integer | No | `8000` (Local) / `$PORT` (Render) | Puerto TCP de escucha del servidor web. |
 | `HOST` | String | No | `0.0.0.0` | Dirección IP de enlace de la aplicación. |
-| `ENTORNO` | String | No | `produccion` | Entorno de ejecución (`desarrollo` / `produccion`). |
+| `ENTORNO` | String | No | `desarrollo` (Local) / `produccion` | Entorno de ejecución (`desarrollo` / `produccion`). |
 | `SECRET_KEY` | String | No | *(Autogenerada)* | Clave para firma criptográfica de cookies de sesión segura. |
 
 ---

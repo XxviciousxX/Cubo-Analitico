@@ -58,13 +58,18 @@ test_*.py
 pruebas*.py
 baseDatos/probar*.py
 baseDatos/verificar*.py
-baseDatos/generar*.py
 baseDatos/limpiar*.py
-datosPrueba/
+!baseDatos/generarDatosPrueba.py
+!baseDatos/crearTablasRelacionadas.py
 
-# --- DOCUMENTOS MARKDOWN AUXILIARES (SOLO SUBIR README.md) ---
+# Carpeta de datos de prueba para evaluadores
+!datosPrueba/
+!datosPrueba/*
+
+# --- DOCUMENTOS MARKDOWN AUXILIARES ---
 *.md
 !README.md
+!datosPrueba/README.md
 
 # --- DATA LAKE Y ALMACENAMIENTO DINAMICO (PARQUETS Y BASES DE DATOS LOCALES) ---
 # Los archivos Parquet se generan en tiempo de ejecucion y no deben sobrecargar el repositorio
